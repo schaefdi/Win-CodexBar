@@ -89,6 +89,8 @@ describe("MenuCard", () => {
         thirtyDayCost: 1.23,
         thirtyDayTokens: 584_000,
         latestTokens: null,
+        allTimeCost: 10.50,
+        allTimeTokens: 2_500_000,
         topModel: "glim-4.6",
         estimateNote: "Estimated from local logs",
       },

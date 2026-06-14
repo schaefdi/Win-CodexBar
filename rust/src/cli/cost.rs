@@ -34,6 +34,10 @@ pub struct CostArgs {
     /// Number of days to scan (default: 30)
     #[arg(short, long, default_value = "30")]
     pub days: u32,
+
+    /// Scan all-time usage (overrides --days)
+    #[arg(long = "all-time")]
+    pub all_time: bool,
 }
 
 /// Run the cost command
@@ -46,13 +50,18 @@ pub async fn run(args: CostArgs) -> anyhow::Result<()> {
 
     let providers = ProviderSelection::from_arg(args.provider.as_deref())?;
     let use_color = !args.no_color && is_terminal();
-    let scanner = CostScanner::new(args.days);
+    let scanner = if args.all_time {
+        CostScanner::all_time()
+    } else {
+        CostScanner::new(args.days)
+    };
 
     tracing::debug!(
-        "Running cost command: providers={:?}, format={:?}, days={}",
+        "Running cost command: providers={:?}, format={:?}, days={}, all_time={}",
         providers.as_list(),
         format,
-        args.days
+        args.days,
+        args.all_time
     );
 
     // Collect cost data for requested providers
@@ -92,10 +101,10 @@ pub async fn run(args: CostArgs) -> anyhow::Result<()> {
 
     match format {
         OutputFormat::Text => {
-            print_text_output(&results, use_color, args.days);
+            print_text_output(&results, use_color, args.days, args.all_time);
         }
         OutputFormat::Json => {
-            print_json_output(&results, args.pretty, args.days)?;
+            print_json_output(&results, args.pretty, args.days, args.all_time)?;
         }
     }
 
@@ -111,15 +120,21 @@ struct CostResult {
 }
 
 /// Print text output
-fn print_text_output(results: &[CostResult], use_color: bool, days: u32) {
+fn print_text_output(results: &[CostResult], use_color: bool, days: u32, all_time: bool) {
     for (i, result) in results.iter().enumerate() {
+        let period_str = if all_time {
+            "all time".to_string()
+        } else {
+            format!("last {} days", days)
+        };
+
         if use_color {
             println!(
-                "\x1b[1m{} Cost (last {} days)\x1b[0m",
-                result.display_name, days
+                "\x1b[1m{} Cost ({})\x1b[0m",
+                result.display_name, period_str
             );
         } else {
-            println!("{} Cost (last {} days)", result.display_name, days);
+            println!("{} Cost ({})", result.display_name, period_str);
         }
 
         if !result.supported {
@@ -183,7 +198,12 @@ fn print_text_output(results: &[CostResult], use_color: bool, days: u32) {
 }
 
 /// Print JSON output
-fn print_json_output(results: &[CostResult], pretty: bool, days: u32) -> anyhow::Result<()> {
+fn print_json_output(
+    results: &[CostResult],
+    pretty: bool,
+    days: u32,
+    all_time: bool,
+) -> anyhow::Result<()> {
     let payloads: Vec<serde_json::Value> = results
         .iter()
         .map(|r| {
@@ -197,7 +217,8 @@ fn print_json_output(results: &[CostResult], pretty: bool, days: u32) -> anyhow:
                 serde_json::json!({
                     "provider": r.provider,
                     "supported": true,
-                    "days_scanned": days,
+                    "days_scanned": if all_time { serde_json::Value::Null } else { serde_json::json!(days) },
+                    "all_time": all_time,
                     "cost": {
                         "total_usd": r.summary.total_cost_usd,
                         "currency": "USD"

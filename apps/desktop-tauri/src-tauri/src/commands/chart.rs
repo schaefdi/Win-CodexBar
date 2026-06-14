@@ -47,6 +47,8 @@ pub struct ProviderLocalUsageSummary {
     pub thirty_day_cost: Option<f64>,
     pub thirty_day_tokens: Option<u64>,
     pub latest_tokens: Option<u64>,
+    pub all_time_cost: Option<f64>,
+    pub all_time_tokens: Option<u64>,
     pub top_model: Option<String>,
     pub estimate_note: String,
 }
@@ -154,9 +156,17 @@ fn load_local_usage_summary(
         return None;
     }
     let today = scan_local_cost(provider_id, 1, cancel).unwrap_or_default();
+    if cancel.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+        return None;
+    }
+    let all_time = scan_local_all_time_cost(provider_id, cancel).unwrap_or_default();
+    if cancel.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+        return None;
+    }
 
     let thirty_day_tokens = total_tokens(&thirty_day);
     let latest_tokens = total_tokens(&today);
+    let all_time_tokens = total_tokens(&all_time);
     let has_usage =
         thirty_day.sessions_count > 0 || thirty_day.total_cost_usd > 0.0 || thirty_day_tokens > 0;
     if !has_usage {
@@ -168,6 +178,8 @@ fn load_local_usage_summary(
         thirty_day_cost: non_zero_f64(thirty_day.total_cost_usd),
         thirty_day_tokens: non_zero_u64(thirty_day_tokens),
         latest_tokens: non_zero_u64(latest_tokens),
+        all_time_cost: non_zero_f64(all_time.total_cost_usd),
+        all_time_tokens: non_zero_u64(all_time_tokens),
         top_model: top_model(&thirty_day),
         estimate_note: match provider_id {
             "claude" => "Estimated from local Claude logs at API rates; token totals may differ from your bill",
@@ -183,6 +195,15 @@ fn scan_local_cost(
     cancel: Option<&AtomicBool>,
 ) -> Option<CostSummary> {
     let scanner = CostScanner::new(days);
+    match provider_id {
+        "codex" => Some(scanner.scan_codex_with_cancel(cancel)),
+        "claude" => Some(scanner.scan_claude_with_cancel(cancel)),
+        _ => None,
+    }
+}
+
+fn scan_local_all_time_cost(provider_id: &str, cancel: Option<&AtomicBool>) -> Option<CostSummary> {
+    let scanner = CostScanner::all_time();
     match provider_id {
         "codex" => Some(scanner.scan_codex_with_cancel(cancel)),
         "claude" => Some(scanner.scan_claude_with_cancel(cancel)),

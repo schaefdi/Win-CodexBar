@@ -80,6 +80,8 @@ const DEMO_LOCAL_USAGE: Record<string, ProviderLocalUsageSummary> = {
     thirtyDayCost: 3442.16,
     thirtyDayTokens: 4_700_000_000,
     latestTokens: 115_000_000,
+    allTimeCost: 12500.50,
+    allTimeTokens: 18_200_000_000,
     topModel: "gpt-5.5",
     estimateNote: "Estimated from local logs; may differ from your bill",
   },
@@ -88,6 +90,8 @@ const DEMO_LOCAL_USAGE: Record<string, ProviderLocalUsageSummary> = {
     thirtyDayCost: null,
     thirtyDayTokens: 584_000,
     latestTokens: 352_000,
+    allTimeCost: 152.34,
+    allTimeTokens: 4_800_000,
     topModel: "glm-4.6",
     estimateNote:
       "Estimated from local Claude logs at API rates; token totals may differ from your bill",
@@ -154,6 +158,18 @@ function LocalUsageBlock({
         <div>
           <span className="menu-card__local-label">Latest tokens</span>
           <strong>{formatCompactCount(summary.latestTokens)}</strong>
+        </div>
+        <div>
+          <span className="menu-card__local-label">All-time cost</span>
+          <strong>
+            {summary.allTimeCost != null
+              ? formatCurrency(summary.allTimeCost, "USD")
+              : "—"}
+          </strong>
+        </div>
+        <div>
+          <span className="menu-card__local-label">All-time tokens</span>
+          <strong>{formatCompactCount(summary.allTimeTokens)}</strong>
         </div>
       </div>
 

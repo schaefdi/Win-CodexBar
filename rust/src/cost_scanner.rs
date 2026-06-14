@@ -174,12 +174,30 @@ struct ClaudeUsage {
 /// Cost usage scanner
 pub struct CostScanner {
     days: u32,
+    all_time: bool,
 }
 
 impl CostScanner {
     /// Create a new scanner for the last N days
     pub fn new(days: u32) -> Self {
-        Self { days }
+        Self {
+            days,
+            all_time: false,
+        }
+    }
+
+    /// Create a new scanner that scans all-time usage
+    pub fn all_time() -> Self {
+        Self {
+            days: 0,
+            all_time: true,
+        }
+    }
+
+    /// Set all_time flag
+    pub fn with_all_time(mut self, all_time: bool) -> Self {
+        self.all_time = all_time;
+        self
     }
 
     /// Scan Codex local logs
@@ -196,40 +214,70 @@ impl CostScanner {
 
         let mut summary = CostSummary::default();
         let today = Utc::now().date_naive();
-        let start_date = today - Duration::days(self.days as i64);
 
-        summary.period_start = Some(start_date);
-        summary.period_end = Some(today);
+        if self.all_time {
+            let start_date = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();
+            summary.period_start = Some(start_date);
+            summary.period_end = Some(today);
 
-        // Iterate through date-based directory structure
-        for days_ago in 0..self.days {
-            if is_cancelled(cancel) {
-                break;
-            }
-            let date = today - Duration::days(days_ago as i64);
-            let year = date.format("%Y").to_string();
-            let month = date.format("%m").to_string();
-            let day = date.format("%d").to_string();
+            self.scan_codex_dir(&sessions_dir, &mut summary, cancel);
+        } else {
+            let start_date = today - Duration::days(self.days as i64);
+            summary.period_start = Some(start_date);
+            summary.period_end = Some(today);
 
-            let day_dir = sessions_dir.join(&year).join(&month).join(&day);
-            if !day_dir.exists() {
-                continue;
-            }
+            // Iterate through date-based directory structure
+            for days_ago in 0..self.days {
+                if is_cancelled(cancel) {
+                    break;
+                }
+                let date = today - Duration::days(days_ago as i64);
+                let year = date.format("%Y").to_string();
+                let month = date.format("%m").to_string();
+                let day = date.format("%d").to_string();
 
-            if let Ok(entries) = fs::read_dir(&day_dir) {
-                for entry in entries.flatten() {
-                    if is_cancelled(cancel) {
-                        break;
-                    }
-                    let path = entry.path();
-                    if path.extension().is_some_and(|e| e == "jsonl") {
-                        self.parse_codex_file(&path, &mut summary, cancel);
+                let day_dir = sessions_dir.join(&year).join(&month).join(&day);
+                if !day_dir.exists() {
+                    continue;
+                }
+
+                if let Ok(entries) = fs::read_dir(&day_dir) {
+                    for entry in entries.flatten() {
+                        if is_cancelled(cancel) {
+                            break;
+                        }
+                        let path = entry.path();
+                        if path.extension().is_some_and(|e| e == "jsonl") {
+                            self.parse_codex_file(&path, &mut summary, cancel);
+                        }
                     }
                 }
             }
         }
 
         summary
+    }
+
+    fn scan_codex_dir(&self, dir: &Path, summary: &mut CostSummary, cancel: Option<&AtomicBool>) {
+        if is_cancelled(cancel) {
+            return;
+        }
+        let entries = match fs::read_dir(dir) {
+            Ok(e) => e,
+            Err(_) => return,
+        };
+
+        for entry in entries.flatten() {
+            if is_cancelled(cancel) {
+                break;
+            }
+            let path = entry.path();
+            if path.is_dir() {
+                self.scan_codex_dir(&path, summary, cancel);
+            } else if path.extension().is_some_and(|e| e == "jsonl") {
+                self.parse_codex_file(&path, summary, cancel);
+            }
+        }
     }
 
     /// Scan Claude local logs
@@ -246,8 +294,16 @@ impl CostScanner {
 
         let mut summary = CostSummary::default();
         let today = Utc::now().date_naive();
-        let start_date = today - Duration::days(self.days as i64);
-        let cutoff = Utc::now() - Duration::days(self.days as i64);
+        let start_date = if self.all_time {
+            NaiveDate::from_ymd_opt(2000, 1, 1).unwrap()
+        } else {
+            today - Duration::days(self.days as i64)
+        };
+        let cutoff = if self.all_time {
+            DateTime::<Utc>::from_timestamp(0, 0).unwrap()
+        } else {
+            Utc::now() - Duration::days(self.days as i64)
+        };
 
         summary.period_start = Some(start_date);
         summary.period_end = Some(today);
@@ -301,7 +357,11 @@ impl CostScanner {
             return;
         }
         let today = Utc::now().date_naive();
-        let start_date = today - Duration::days(self.days as i64);
+        let start_date = if self.all_time {
+            NaiveDate::from_ymd_opt(2000, 1, 1).unwrap()
+        } else {
+            today - Duration::days(self.days as i64)
+        };
         let range = CostUsageDayRange::new(start_date, today);
         let parse_result = match JsonlScanner::parse_codex_file(path, &range, 0, None, None) {
             Ok(result) => result,
