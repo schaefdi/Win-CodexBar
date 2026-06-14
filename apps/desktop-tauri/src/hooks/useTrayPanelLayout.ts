@@ -36,6 +36,7 @@ export function useTrayPanelLayout({
   const resizeRunRef = useRef(0);
   const layoutTimerRef = useRef<number | undefined>(undefined);
   const lastSizeRef = useRef<{ width: number; height: number } | null>(null);
+  const isResizingRef = useRef(false);
 
   const requestLayout = useCallback(() => {
     if (layoutTimerRef.current !== undefined) {
@@ -53,7 +54,11 @@ export function useTrayPanelLayout({
   useEffect(() => {
     const surface = document.querySelector<HTMLElement>(".menu-surface--tray");
     if (!surface || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => requestLayout());
+    const observer = new ResizeObserver(() => {
+      if (!isResizingRef.current) {
+        requestLayout();
+      }
+    });
     observer.observe(surface);
     return () => observer.disconnect();
   }, [requestLayout]);
@@ -76,6 +81,7 @@ export function useTrayPanelLayout({
         : TRAY_OVERVIEW_MIN_HEIGHT;
 
     const resize = async () => {
+      isResizingRef.current = true;
       const run = ++resizeRunRef.current;
       const win = getCurrentWindow();
       const surface = document.querySelector<HTMLElement>(".menu-surface--tray");
@@ -197,6 +203,9 @@ export function useTrayPanelLayout({
         if (stack) {
           stack.style.overflow = previous.stackOverflow ?? "";
         }
+        requestAnimationFrame(() => {
+          isResizingRef.current = false;
+        });
       }
     };
 
