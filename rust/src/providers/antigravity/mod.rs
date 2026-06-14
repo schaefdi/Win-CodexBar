@@ -27,9 +27,9 @@ impl AntigravityProvider {
             metadata: ProviderMetadata {
                 id: ProviderId::Antigravity,
                 display_name: "Antigravity",
-                session_label: "Claude",
-                weekly_label: "Gemini Pro",
-                supports_opus: true,
+                session_label: "Gemini Models: Weekly Limit",
+                weekly_label: "Gemini Models: Five Hour Limit",
+                supports_opus: false,
                 supports_credits: false,
                 default_enabled: false,
                 is_primary: false,
@@ -287,9 +287,11 @@ impl AntigravityProvider {
                 if let Ok(retry) = retry_resp
                     && retry.status().is_success()
                 {
-                    let json: UserStatusResponse = retry
+                    let raw_val: serde_json::Value = retry
                         .json()
                         .await
+                        .map_err(|e| ProviderError::Parse(e.to_string()))?;
+                    let json: UserStatusResponse = serde_json::from_value(raw_val)
                         .map_err(|e| ProviderError::Parse(e.to_string()))?;
                     return self.parse_user_status(json);
                 }
@@ -303,9 +305,12 @@ impl AntigravityProvider {
             )));
         }
 
-        let json: UserStatusResponse = resp
+        let raw_val: serde_json::Value = resp
             .json()
             .await
+            .map_err(|e| ProviderError::Other(format!("Failed to parse response: {}", e)))?;
+
+        let json: UserStatusResponse = serde_json::from_value(raw_val)
             .map_err(|e| ProviderError::Other(format!("Failed to parse response: {}", e)))?;
 
         self.parse_user_status(json)
@@ -324,67 +329,67 @@ impl AntigravityProvider {
             .and_then(|d| d.client_model_configs)
             .unwrap_or_default();
 
-        let mut quota_configs = model_configs
-            .iter()
-            .filter(|config| config.quota_info.is_some())
-            .filter(|config| !model_label(config).is_empty())
-            .collect::<Vec<_>>();
-        quota_configs.sort_by(|a, b| compare_model_configs(a, b));
+        let mut gemini_weekly: Option<QuotaInfo> = None;
+        let mut gemini_five_hour: Option<QuotaInfo> = None;
+        let mut claude_weekly: Option<QuotaInfo> = None;
+        let mut claude_five_hour: Option<QuotaInfo> = None;
 
-        let summary_candidates = quota_configs
-            .iter()
-            .copied()
-            .filter(|config| !is_noisy_summary_model(model_label(config)))
-            .collect::<Vec<_>>();
-
-        let primary = best_summary_model(&summary_candidates, ModelFamily::Claude)
-            .and_then(|config| config.quota_info.as_ref())
-            .map(rate_window_from_quota)
-            .or_else(|| {
-                summary_candidates
-                    .first()
-                    .and_then(|config| config.quota_info.as_ref())
-                    .map(rate_window_from_quota)
-            })
-            .or_else(|| {
-                quota_configs
-                    .first()
-                    .and_then(|config| config.quota_info.as_ref())
-                    .map(rate_window_from_quota)
-            });
-
-        let secondary = best_summary_model(&summary_candidates, ModelFamily::GeminiPro)
-            .and_then(|config| config.quota_info.as_ref())
-            .map(rate_window_from_quota);
-
-        let tertiary = best_summary_model(&summary_candidates, ModelFamily::GeminiFlash)
-            .and_then(|config| config.quota_info.as_ref())
-            .map(rate_window_from_quota);
-
-        let primary = primary.unwrap_or_else(|| RateWindow::new(0.0));
-        let mut snapshot = UsageSnapshot::new(primary);
-
-        if let Some(sec) = secondary {
-            snapshot = snapshot.with_secondary(sec);
-        }
-        if let Some(ter) = tertiary {
-            snapshot = snapshot.with_model_specific(ter);
-        }
-
-        for config in quota_configs {
+        for config in model_configs {
             let Some(quota) = &config.quota_info else {
                 continue;
             };
-            let title = clean_model_label(model_label(config));
-            if title.is_empty() {
+            let label = model_label(&config);
+            if label.is_empty() {
                 continue;
             }
-            snapshot = snapshot.with_extra_rate_window(
-                model_window_id(config),
-                title,
-                rate_window_from_quota(quota),
-            );
+
+            let is_gemini = label.to_lowercase().contains("gemini");
+            let is_weekly = label.to_lowercase().contains("(low)");
+
+            let target = if is_gemini {
+                if is_weekly {
+                    &mut gemini_weekly
+                } else {
+                    &mut gemini_five_hour
+                }
+            } else {
+                if is_weekly {
+                    &mut claude_weekly
+                } else {
+                    &mut claude_five_hour
+                }
+            };
+
+            // Keep the one with the minimum remaining_fraction (most restrictive)
+            if let Some(existing) = target {
+                let existing_rem = existing.remaining_fraction.unwrap_or(1.0);
+                let new_rem = quota.remaining_fraction.unwrap_or(1.0);
+                if new_rem < existing_rem {
+                    *existing = quota.clone();
+                }
+            } else {
+                *target = Some(quota.clone());
+            }
         }
+
+        let primary = rate_window_from_quota_opt(gemini_weekly.as_ref());
+        let secondary = rate_window_from_quota_opt(gemini_five_hour.as_ref());
+
+        let mut snapshot = UsageSnapshot::new(primary).with_secondary(secondary);
+
+        let claude_weekly_win = rate_window_from_quota_opt(claude_weekly.as_ref());
+        let claude_five_hour_win = rate_window_from_quota_opt(claude_five_hour.as_ref());
+
+        snapshot = snapshot.with_extra_rate_window(
+            "claude-gpt-weekly",
+            "Claude & GPT Models: Weekly Limit",
+            claude_weekly_win,
+        );
+        snapshot = snapshot.with_extra_rate_window(
+            "claude-gpt-five-hour",
+            "Claude & GPT Models: Five Hour Limit",
+            claude_five_hour_win,
+        );
 
         // Add plan info
         let plan_name = user_status
@@ -394,6 +399,10 @@ impl AntigravityProvider {
 
         if let Some(plan) = plan_name {
             snapshot = snapshot.with_login_method(&plan);
+        }
+
+        if let Some(ref email) = user_status.email {
+            snapshot = snapshot.with_email(email);
         }
 
         Ok(snapshot)
@@ -455,7 +464,6 @@ struct UserStatusResponse {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct UserStatus {
-    #[allow(dead_code)]
     email: Option<String>,
     plan_status: Option<PlanStatus>,
     cascade_model_config_data: Option<ModelConfigData>,
@@ -492,131 +500,11 @@ struct ModelConfig {
     quota_info: Option<QuotaInfo>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct QuotaInfo {
     remaining_fraction: Option<f64>,
     reset_time: Option<String>,
-}
-
-// ── Model-family classification ──────────────────────────────────────
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum ModelFamily {
-    Claude,
-    ClaudeThinking,
-    GeminiPro,
-    GeminiFlash,
-    Other,
-}
-
-fn classify_model(label: &str) -> ModelFamily {
-    let lower = label.to_lowercase();
-    if lower.contains("claude") {
-        if lower.contains("thinking") {
-            ModelFamily::ClaudeThinking
-        } else {
-            ModelFamily::Claude
-        }
-    } else if lower.contains("gemini") && lower.contains("pro") {
-        ModelFamily::GeminiPro
-    } else if lower.contains("gemini") && lower.contains("flash") {
-        ModelFamily::GeminiFlash
-    } else if lower.contains("pro") && !is_noisy_summary_model(&lower) {
-        ModelFamily::GeminiPro
-    } else if lower.contains("flash") {
-        ModelFamily::GeminiFlash
-    } else {
-        ModelFamily::Other
-    }
-}
-
-fn best_summary_model<'a>(
-    candidates: &[&'a ModelConfig],
-    family: ModelFamily,
-) -> Option<&'a ModelConfig> {
-    candidates
-        .iter()
-        .copied()
-        .filter(|config| classify_model(model_label(config)) == family)
-        .min_by(|a, b| {
-            let a_label = model_label(a);
-            let b_label = model_label(b);
-            let a_priority = selection_priority(a_label, family);
-            let b_priority = selection_priority(b_label, family);
-            a_priority
-                .cmp(&b_priority)
-                .then_with(|| compare_model_configs(a, b))
-        })
-}
-
-fn selection_priority(label: &str, family: ModelFamily) -> u8 {
-    let lower = label.to_lowercase();
-    match family {
-        ModelFamily::GeminiPro if lower.contains("low") => 0,
-        ModelFamily::GeminiPro => 1,
-        _ => 0,
-    }
-}
-
-fn compare_model_configs(a: &ModelConfig, b: &ModelConfig) -> std::cmp::Ordering {
-    let a_label = model_label(a);
-    let b_label = model_label(b);
-    family_rank(classify_model(a_label))
-        .cmp(&family_rank(classify_model(b_label)))
-        .then_with(|| parse_model_version(b_label).cmp(&parse_model_version(a_label)))
-        .then_with(|| tier_rank(a_label).cmp(&tier_rank(b_label)))
-        .then_with(|| clean_model_label(a_label).cmp(&clean_model_label(b_label)))
-}
-
-fn family_rank(family: ModelFamily) -> u8 {
-    match family {
-        ModelFamily::Claude => 0,
-        ModelFamily::GeminiPro => 1,
-        ModelFamily::GeminiFlash => 2,
-        ModelFamily::ClaudeThinking => 3,
-        ModelFamily::Other => 4,
-    }
-}
-
-fn tier_rank(label: &str) -> u8 {
-    let lower = label.to_lowercase();
-    if lower.contains("high") {
-        0
-    } else if lower.contains("medium") {
-        1
-    } else if lower.contains("low") {
-        2
-    } else {
-        3
-    }
-}
-
-fn parse_model_version(label: &str) -> (u16, u16) {
-    static VERSION_RE: OnceLock<Regex> = OnceLock::new();
-    let regex =
-        VERSION_RE.get_or_init(|| Regex::new(r"(?i)(\d+)(?:[.-](\d+))?").expect("valid regex"));
-    let Some(caps) = regex.captures(label) else {
-        return (0, 0);
-    };
-    let major = caps
-        .get(1)
-        .and_then(|m| m.as_str().parse::<u16>().ok())
-        .unwrap_or(0);
-    let minor = caps
-        .get(2)
-        .and_then(|m| m.as_str().parse::<u16>().ok())
-        .unwrap_or(0);
-    (major, minor)
-}
-
-fn is_noisy_summary_model(label: &str) -> bool {
-    let lower = label.to_lowercase();
-    lower.contains("image")
-        || lower.contains("lite")
-        || lower.contains("autocomplete")
-        || lower.contains("completion")
-        || lower.contains("internal")
 }
 
 fn model_label(config: &ModelConfig) -> &str {
@@ -629,66 +517,20 @@ fn model_label(config: &ModelConfig) -> &str {
     }
 }
 
-fn model_window_id(config: &ModelConfig) -> String {
-    let raw = config
-        .model_id
-        .as_deref()
-        .or(config.id.as_deref())
-        .unwrap_or_else(|| model_label(config));
-    let slug = raw
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() {
-                ch.to_ascii_lowercase()
-            } else {
-                '-'
-            }
-        })
-        .collect::<String>()
-        .trim_matches('-')
-        .to_string();
-    format!("model-{}", if slug.is_empty() { "unknown" } else { &slug })
-}
-
-fn rate_window_from_quota(quota: &QuotaInfo) -> RateWindow {
-    let remaining = quota.remaining_fraction.unwrap_or(1.0);
-    let used_percent = (1.0 - remaining) * 100.0;
-    RateWindow::with_details(used_percent, None, None, quota.reset_time.clone())
-}
-
-fn clean_model_label(label: &str) -> String {
-    let mut out = label.trim().replace('_', " ");
-    while out.contains("  ") {
-        out = out.replace("  ", " ");
+fn rate_window_from_quota_opt(quota: Option<&QuotaInfo>) -> RateWindow {
+    match quota {
+        Some(q) => {
+            let remaining = q.remaining_fraction.unwrap_or(1.0);
+            let used_percent = (1.0 - remaining) * 100.0;
+            RateWindow::with_details(used_percent, None, None, q.reset_time.clone())
+        }
+        None => RateWindow::new(0.0),
     }
-    out
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_classify_model_families() {
-        assert_eq!(classify_model("Claude 3.5 Sonnet"), ModelFamily::Claude);
-        assert_eq!(classify_model("claude-4-opus"), ModelFamily::Claude);
-        assert_eq!(
-            classify_model("Claude Thinking"),
-            ModelFamily::ClaudeThinking
-        );
-        assert_eq!(
-            classify_model("claude-3.5-sonnet-thinking"),
-            ModelFamily::ClaudeThinking
-        );
-        assert_eq!(classify_model("Gemini 2.5 Pro Low"), ModelFamily::GeminiPro);
-        assert_eq!(classify_model("gemini-pro-low"), ModelFamily::GeminiPro);
-        assert_eq!(classify_model("Pro Low Latency"), ModelFamily::GeminiPro);
-        assert_eq!(classify_model("Gemini 2.5 Flash"), ModelFamily::GeminiFlash);
-        assert_eq!(classify_model("gemini-flash"), ModelFamily::GeminiFlash);
-        assert_eq!(classify_model("Flash Model"), ModelFamily::GeminiFlash);
-        assert_eq!(classify_model("GPT-4o"), ModelFamily::Other);
-        assert_eq!(classify_model("unknown-model"), ModelFamily::Other);
-    }
 
     fn make_response(models: Vec<(&str, f64)>) -> UserStatusResponse {
         let json = serde_json::json!({
@@ -709,72 +551,41 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_user_status_standard() {
+    fn test_parse_user_status_grouped() {
         let resp = make_response(vec![
-            ("Claude 3.5 Sonnet", 0.8),
-            ("Gemini 2.5 Pro Low", 0.5),
-            ("Gemini 2.5 Flash", 0.9),
+            ("Gemini 3.5 Flash (High)", 0.5),
+            ("Gemini 3.5 Flash (Low)", 0.6),
+            ("Gemini 3.1 Pro (Low)", 0.7),
+            ("Gemini 3.1 Pro (High)", 0.55),
+            ("Claude Sonnet 4.6 (Thinking)", 0.8),
+            ("Claude Opus 4.6 (Thinking)", 0.9),
+            ("GPT-OSS 120B (Medium)", 0.85),
+            ("Gemini 3.5 Flash (Medium)", 0.4),
         ]);
         let provider = AntigravityProvider::new();
         let snap = provider.parse_user_status(resp).unwrap();
 
-        assert!((snap.primary.used_percent - 20.0).abs() < 0.1);
+        // Gemini Weekly: lowest of Gemini low configs (0.6, 0.7) -> 0.6. used = (1 - 0.6) * 100 = 40%
+        assert!((snap.primary.used_percent - 40.0).abs() < 0.1);
+
+        // Gemini Five Hour: lowest of Gemini high/medium configs (0.5, 0.55, 0.4) -> 0.4. used = (1 - 0.4) * 100 = 60%
         let sec = snap.secondary.unwrap();
-        assert!((sec.used_percent - 50.0).abs() < 0.1);
-        let ter = snap.model_specific.unwrap();
-        assert!((ter.used_percent - 10.0).abs() < 0.1);
-        assert_eq!(snap.extra_rate_windows.len(), 3);
-        assert!(
-            snap.extra_rate_windows
-                .iter()
-                .any(|window| window.title == "Gemini 2.5 Flash")
-        );
-    }
+        assert!((sec.used_percent - 60.0).abs() < 0.1);
 
-    #[test]
-    fn test_parse_user_status_thinking_skipped() {
-        let resp = make_response(vec![
-            ("Claude Thinking", 0.6),
-            ("Claude 3.5 Sonnet", 0.7),
-            ("Gemini 2.5 Flash", 0.5),
-        ]);
-        let provider = AntigravityProvider::new();
-        let snap = provider.parse_user_status(resp).unwrap();
+        // Claude & GPT Weekly: none matched -> default 0% used
+        let extra_weekly = snap
+            .extra_rate_windows
+            .iter()
+            .find(|w| w.id == "claude-gpt-weekly")
+            .unwrap();
+        assert!((extra_weekly.window.used_percent - 0.0).abs() < 0.1);
 
-        assert!((snap.primary.used_percent - 30.0).abs() < 0.1);
-    }
-
-    #[test]
-    fn test_parse_user_status_fallback_first() {
-        let resp = make_response(vec![("GPT-4o", 0.4), ("Mistral Large", 0.6)]);
-        let provider = AntigravityProvider::new();
-        let snap = provider.parse_user_status(resp).unwrap();
-
-        assert!((snap.primary.used_percent - 60.0).abs() < 0.1);
-        assert!(snap.secondary.is_none());
-        assert!(snap.model_specific.is_none());
-    }
-
-    #[test]
-    fn test_noisy_models_do_not_drive_summary_windows() {
-        let resp = make_response(vec![
-            ("Gemini 2.5 Flash Image", 0.01),
-            ("Gemini 2.5 Pro Lite", 0.02),
-            ("Gemini autocomplete internal", 0.03),
-            ("Claude 4 Sonnet", 0.8),
-            ("Gemini 2.5 Pro Low", 0.6),
-            ("Gemini 2.5 Flash", 0.7),
-        ]);
-        let provider = AntigravityProvider::new();
-        let snap = provider.parse_user_status(resp).unwrap();
-
-        assert!((snap.primary.used_percent - 20.0).abs() < 0.1);
-        assert!((snap.secondary.unwrap().used_percent - 40.0).abs() < 0.1);
-        assert!((snap.model_specific.unwrap().used_percent - 30.0).abs() < 0.1);
-        assert!(
-            snap.extra_rate_windows
-                .iter()
-                .any(|window| window.title == "Gemini 2.5 Flash Image")
-        );
+        // Claude & GPT Five Hour: lowest of (0.8, 0.9, 0.85) -> 0.8. used = (1 - 0.8) * 100 = 20%
+        let extra_five_hour = snap
+            .extra_rate_windows
+            .iter()
+            .find(|w| w.id == "claude-gpt-five-hour")
+            .unwrap();
+        assert!((extra_five_hour.window.used_percent - 20.0).abs() < 0.1);
     }
 }
