@@ -58,9 +58,36 @@ function provider(error: string | null, usedPercent = 0): ProviderUsageSnapshot 
   };
 }
 
+function antigravityProvider(): ProviderUsageSnapshot {
+  return {
+    providerId: "antigravity",
+    displayName: "Antigravity",
+    primary: rateWindow(45),
+    primaryLabel: "Gemini Models: Weekly Limit",
+    secondary: rateWindow(99),
+    secondaryLabel: "Gemini Models: Five Hour Limit",
+    modelSpecific: null,
+    tertiary: null,
+    extraRateWindows: [
+      { id: "claude-gpt-weekly", title: "Claude & GPT Models: Weekly Limit", window: rateWindow(34) },
+      { id: "claude-gpt-five-hour", title: "Claude & GPT Models: Five Hour Limit", window: rateWindow(12) },
+    ],
+    cost: null,
+    planName: "Pro",
+    accountEmail: "user@example.com",
+    sourceLabel: "local",
+    updatedAt: "2026-06-14T00:00:00Z",
+    error: null,
+    pace: null,
+    accountOrganization: null,
+    trayStatusLabel: null,
+    fetchDurationMs: null,
+  };
+}
+
 function renderCard(
   snapshot: ProviderUsageSnapshot,
-  opts: { showAsUsed?: boolean; onLayoutChange?: () => void } = {},
+  opts: { showAsUsed?: boolean; onLayoutChange?: () => void; compactMetrics?: boolean } = {},
 ) {
   return render(
     <LocaleProvider>
@@ -69,6 +96,7 @@ function renderCard(
         hideEmail={false}
         resetTimeRelative={true}
         showAsUsed={opts.showAsUsed}
+        compactMetrics={opts.compactMetrics}
         onLayoutChange={opts.onLayoutChange}
       />
     </LocaleProvider>,
@@ -116,6 +144,32 @@ describe("MenuCard", () => {
     expect(screen.queryByText("30d cost")).not.toBeInTheDocument();
     expect(screen.queryByText("30d tokens")).not.toBeInTheDocument();
     expect(screen.queryByText("Estimated from local logs")).not.toBeInTheDocument();
+  });
+
+  it("keeps Antigravity's non-Gemini windows in the compact summary", async () => {
+    renderCard(antigravityProvider(), { compactMetrics: true });
+
+    // All four grouped windows must remain visible even in compact mode.
+    expect(await screen.findByText("Gemini Models: Weekly Limit")).toBeInTheDocument();
+    expect(screen.getByText("Gemini Models: Five Hour Limit")).toBeInTheDocument();
+    expect(screen.getByText("Claude & GPT Models: Weekly Limit")).toBeInTheDocument();
+    expect(screen.getByText("Claude & GPT Models: Five Hour Limit")).toBeInTheDocument();
+  });
+
+  it("still compacts non-grouped providers to two windows", async () => {
+    const claude: ProviderUsageSnapshot = {
+      ...provider(null, 20),
+      secondary: rateWindow(40),
+      secondaryLabel: "Weekly",
+      extraRateWindows: [
+        { id: "extra", title: "Extra Window", window: rateWindow(10) },
+      ],
+    };
+    renderCard(claude, { compactMetrics: true });
+
+    expect(await screen.findByText("Session")).toBeInTheDocument();
+    expect(screen.getByText("Weekly")).toBeInTheDocument();
+    expect(screen.queryByText("Extra Window")).not.toBeInTheDocument();
   });
 
   it("can render metric bars as used instead of remaining", async () => {

@@ -391,7 +391,12 @@ export default function MenuCard({
   for (const extra of provider.extraRateWindows ?? []) {
     metrics.push({ label: extra.title, snap: extra.window });
   }
-  const visibleMetrics = compactMetrics ? metrics.slice(0, 2) : metrics;
+  // Antigravity reports four windows across two model families (Gemini +
+  // Claude/GPT). The compact summary normally keeps only the first two rows,
+  // which would hide the non-Gemini limits entirely — so keep all of them.
+  const keepAllMetrics = provider.providerId === "antigravity";
+  const visibleMetrics =
+    compactMetrics && !keepAllMetrics ? metrics.slice(0, 2) : metrics;
 
   const hasCostHistory =
     chartData !== null && chartData.costHistory.some((point) => point.value > 0);

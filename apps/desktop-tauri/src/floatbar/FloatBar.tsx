@@ -9,43 +9,120 @@ import { getProviderIcon } from "../components/providers/providerIcons";
 import type {
   BootstrapState,
   ProviderUsageSnapshot,
+  RateWindowSnapshot,
   SettingsSnapshot,
 } from "../types/bridge";
 import { FLOAT_BAR_CONFIG_CHANGED_EVENT } from "./api";
 import "./FloatBar.css";
 
 /**
- * The capacity pill shown for a single provider.
+ * A single capacity bubble in the float bar. Most providers map to exactly one
+ * pill (their primary window), but some — like Antigravity, which tracks Gemini
+ * and Claude/GPT model families on separate quotas — expand into several pills.
+ */
+interface FloatPill {
+  /** Stable React key, unique across all rendered pills. */
+  key: string;
+  /** Icon-registry id used for the brand glyph + color. */
+  iconId: string;
+  /** Human label shown in the tooltip. */
+  displayName: string;
+  /** The usage window this bubble summarizes. */
+  window: RateWindowSnapshot;
+  /** Provider-level error, if the snapshot failed to fetch. */
+  error: string | null;
+}
+
+/** Pick the most restrictive (exhausted first, else highest-used) window. */
+function worstWindow(windows: RateWindowSnapshot[]): RateWindowSnapshot {
+  return windows.reduce((worst, w) => {
+    if (w.isExhausted && !worst.isExhausted) return w;
+    if (!w.isExhausted && worst.isExhausted) return worst;
+    return w.usedPercent > worst.usedPercent ? w : worst;
+  });
+}
+
+/**
+ * Expand a provider snapshot into the float-bar pills it should render.
+ *
+ * Antigravity multiplexes two model families behind one provider, so it gets
+ * two bubbles: Gemini (its primary/secondary windows) and the non-Gemini
+ * Claude & GPT models (its extra rate windows). Each bubble shows the most
+ * restrictive window in its family. Every other provider maps to a single
+ * pill backed by its primary window.
+ */
+function pillsForProvider(p: ProviderUsageSnapshot): FloatPill[] {
+  if (p.providerId === "antigravity" && !p.error) {
+    const geminiWindows = [p.primary, p.secondary].filter(
+      (w): w is RateWindowSnapshot => w != null,
+    );
+    const otherWindows = (p.extraRateWindows ?? []).map((e) => e.window);
+    const pills: FloatPill[] = [];
+    if (geminiWindows.length > 0) {
+      pills.push({
+        key: `${p.providerId}:gemini`,
+        iconId: "gemini",
+        displayName: `${p.displayName} · Gemini`,
+        window: worstWindow(geminiWindows),
+        error: null,
+      });
+    }
+    if (otherWindows.length > 0) {
+      pills.push({
+        key: `${p.providerId}:other`,
+        iconId: "antigravity",
+        displayName: `${p.displayName} · Claude & GPT`,
+        window: worstWindow(otherWindows),
+        error: null,
+      });
+    }
+    if (pills.length > 0) return pills;
+  }
+
+  return [
+    {
+      key: p.providerId,
+      iconId: p.providerId,
+      displayName: p.displayName,
+      window: p.primary,
+      error: p.error,
+    },
+  ];
+}
+
+/**
+ * The capacity pill shown for a single usage window.
  *
  * Color follows usage: green default, amber when remaining drops below the
  * high-usage threshold, red when remaining is below the critical threshold
- * or the provider is exhausted.
+ * or the window is exhausted.
  */
 function ProviderPill({
-  provider,
+  pill,
   highRemaining,
   critRemaining,
   showAsUsed,
 }: {
-  provider: ProviderUsageSnapshot;
+  pill: FloatPill;
   highRemaining: number;
   critRemaining: number;
   showAsUsed: boolean;
 }) {
-  const remaining = Math.max(0, Math.min(100, provider.primary.remainingPercent));
-  const used = Math.max(0, Math.min(100, provider.primary.usedPercent));
+  const { window: win, error } = pill;
+  const remaining = Math.max(0, Math.min(100, win.remainingPercent));
+  const used = Math.max(0, Math.min(100, win.usedPercent));
   const displayPercent = showAsUsed ? used : remaining;
   const displaySuffix = showAsUsed ? "used" : "remaining";
-  const exhausted = provider.primary.isExhausted || provider.error;
+  const exhausted = win.isExhausted || error;
   let tone: "ok" | "warn" | "crit" = "ok";
   if (exhausted || remaining <= critRemaining) tone = "crit";
   else if (remaining <= highRemaining) tone = "warn";
 
-  const brand = getProviderIcon(provider.providerId).brandColor;
-  const label = provider.error ? "—" : `${Math.round(displayPercent)}%`;
+  const brand = getProviderIcon(pill.iconId).brandColor;
+  const label = error ? "—" : `${Math.round(displayPercent)}%`;
   const resetText = useFormattedResetTime(
-    provider.primary.resetsAt,
-    provider.primary.resetDescription,
+    win.resetsAt,
+    win.resetDescription,
     true,
   );
   const resetSuffix = resetText ? `\n${resetText}` : "";
@@ -53,10 +130,10 @@ function ProviderPill({
   return (
     <div
       className={`floatbar__pill floatbar__pill--${tone}`}
-      title={`${provider.displayName}: ${label} ${displaySuffix}${resetSuffix}`}
+      title={`${pill.displayName}: ${label} ${displaySuffix}${resetSuffix}`}
       style={{ "--brand": brand } as React.CSSProperties}
     >
-      <ProviderIcon providerId={provider.providerId} size={11} />
+      <ProviderIcon providerId={pill.iconId} size={11} />
       <span className="floatbar__pct">{label}</span>
     </div>
   );
@@ -113,14 +190,18 @@ export default function FloatBar({ state }: { state: BootstrapState }) {
   const orientation: "horizontal" | "vertical" =
     settings.floatBarOrientation === "vertical" ? "vertical" : "horizontal";
   const filterIds = settings.floatBarProviderIds;
-  const visible = useMemo(() => {
+  // Expand providers into pills (Antigravity → two: Gemini + Claude/GPT) and
+  // sort the bubbles themselves by usage so the busiest family leads.
+  const pills = useMemo(() => {
     const enabled = new Set(settings.enabledProviders);
     let list = providers.filter((p) => enabled.has(p.providerId));
     if (filterIds && filterIds.length > 0) {
       const wanted = new Set(filterIds);
       list = list.filter((p) => wanted.has(p.providerId));
     }
-    return [...list].sort((a, b) => b.primary.usedPercent - a.primary.usedPercent);
+    return list
+      .flatMap(pillsForProvider)
+      .sort((a, b) => b.window.usedPercent - a.window.usedPercent);
   }, [providers, settings.enabledProviders, filterIds]);
 
   // Resize the window to fit content when the visible set or orientation changes.
@@ -137,7 +218,7 @@ export default function FloatBar({ state }: { state: BootstrapState }) {
         win.setSize({ type: "Logical", width: w, height: h } as never),
       ).catch(() => {});
     });
-  }, [visible.length, orientation]);
+  }, [pills.length, orientation]);
 
   const highRemaining = 100 - settings.highUsageThreshold;
   const critRemaining = 100 - settings.criticalUsageThreshold;
@@ -150,13 +231,13 @@ export default function FloatBar({ state }: { state: BootstrapState }) {
       style={{ opacity: opacityFraction }}
     >
       <div className="floatbar__handle" data-tauri-drag-region aria-hidden />
-      {visible.length === 0 ? (
+      {pills.length === 0 ? (
         <div className="floatbar__empty">No providers</div>
       ) : (
-        visible.map((p) => (
+        pills.map((p) => (
           <ProviderPill
-            key={p.providerId}
-            provider={p}
+            key={p.key}
+            pill={p}
             highRemaining={highRemaining}
             critRemaining={critRemaining}
             showAsUsed={settings.showAsUsed}

@@ -179,6 +179,67 @@ describe("FloatBar", () => {
     expect(titles[1]).toMatch(/Claude: 20% used/);
   });
 
+  it("splits Antigravity into a Gemini and a Claude & GPT bubble", async () => {
+    const antigravity: ProviderUsageSnapshot = {
+      ...snapshot("antigravity", "Antigravity", 45),
+      // Gemini family: weekly 45% used, five-hour exhausted (100%).
+      secondary: rateWindow(100, { exhausted: true }),
+      // Non-Gemini family lives in the extra rate windows.
+      extraRateWindows: [
+        {
+          id: "claude-gpt-weekly",
+          title: "Claude & GPT Models: Weekly Limit",
+          window: rateWindow(34),
+        },
+        {
+          id: "claude-gpt-five-hour",
+          title: "Claude & GPT Models: Five Hour Limit",
+          window: rateWindow(12),
+        },
+      ],
+    };
+    tauriMocks.getCachedProviders.mockResolvedValue([antigravity]);
+    tauriMocks.getSettingsSnapshot.mockResolvedValue(
+      settings({ enabledProviders: ["antigravity"] }),
+    );
+
+    const { container } = renderFloatBar(
+      bootstrap({ enabledProviders: ["antigravity"] }),
+    );
+    await waitFor(() => {
+      expect(container.querySelectorAll(".floatbar__pill").length).toBe(2);
+    });
+
+    const titles = Array.from(container.querySelectorAll(".floatbar__pill")).map(
+      (el) => el.getAttribute("title") ?? "",
+    );
+    // Gemini bubble leads: its worst window is exhausted (100% used).
+    expect(titles[0]).toMatch(/Antigravity · Gemini: 100% used/);
+    // Claude & GPT bubble shows its worst window (weekly, 34% used).
+    expect(titles[1]).toMatch(/Antigravity · Claude & GPT: 34% used/);
+
+    // The Gemini bubble's exhausted window drives the critical tone.
+    expect(container.querySelector(".floatbar__pill--crit")).not.toBeNull();
+  });
+
+  it("keeps Antigravity as one bubble when the snapshot errored", async () => {
+    tauriMocks.getCachedProviders.mockResolvedValue([
+      snapshot("antigravity", "Antigravity", 0, { error: "probe failed" }),
+    ]);
+    tauriMocks.getSettingsSnapshot.mockResolvedValue(
+      settings({ enabledProviders: ["antigravity"] }),
+    );
+
+    const { container } = renderFloatBar(
+      bootstrap({ enabledProviders: ["antigravity"] }),
+    );
+    await waitFor(() => {
+      const pills = container.querySelectorAll(".floatbar__pill");
+      expect(pills.length).toBe(1);
+      expect(pills[0].getAttribute("title")).toMatch(/Antigravity:/);
+    });
+  });
+
   it("can show remaining percentages when configured", async () => {
     tauriMocks.getCachedProviders.mockResolvedValue([
       snapshot("claude", "Claude", 20),

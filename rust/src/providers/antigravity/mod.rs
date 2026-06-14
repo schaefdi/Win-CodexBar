@@ -27,8 +27,8 @@ impl AntigravityProvider {
             metadata: ProviderMetadata {
                 id: ProviderId::Antigravity,
                 display_name: "Antigravity",
-                session_label: "Gemini Models: Weekly Limit",
-                weekly_label: "Gemini Models: Five Hour Limit",
+                session_label: "Gemini Models",
+                weekly_label: "Claude & GPT Models",
                 supports_opus: false,
                 supports_credits: false,
                 default_enabled: false,
@@ -49,7 +49,7 @@ impl AntigravityProvider {
         cmd.args([
                 "-ExecutionPolicy", "Bypass",
                 "-Command",
-                "Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*language_server_windows*' } | ForEach-Object { \"$($_.ProcessId)`t$($_.CommandLine)\" }"
+                "Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*language_server*' } | ForEach-Object { \"$($_.ProcessId)`t$($_.CommandLine)\" }"
             ]);
         #[cfg(windows)]
         cmd.creation_flags(CREATE_NO_WINDOW);
@@ -80,7 +80,10 @@ impl AntigravityProvider {
 
         let mut processes = Vec::new();
         for line in stdout.lines() {
-            if line.contains("language_server_windows") && line.contains("--csrf_token") {
+            // Match any Antigravity/Codeium language-server binary. Older builds run
+            // `language_server_windows_x64.exe`; current Antigravity ships
+            // `language_server.exe`. The `--csrf_token` arg guards against false matches.
+            if line.contains("language_server") && line.contains("--csrf_token") {
                 // Line is "<pid>\t<command line>"; split off the PID prefix we added so the
                 // PID can be used to enumerate the process's real listening ports below.
                 let (pid, line) = match line.split_once('\t') {
@@ -319,11 +322,6 @@ impl AntigravityProvider {
             .await
             .map_err(|e| ProviderError::Other(format!("Failed to parse response: {}", e)))?;
 
-        let _ = std::fs::write(
-            "antigravity_raw.json",
-            serde_json::to_string_pretty(&raw_val).unwrap(),
-        );
-
         let json: UserStatusResponse = serde_json::from_value(raw_val)
             .map_err(|e| ProviderError::Other(format!("Failed to parse response: {}", e)))?;
 
@@ -343,10 +341,13 @@ impl AntigravityProvider {
             .and_then(|d| d.client_model_configs)
             .unwrap_or_default();
 
-        let mut gemini_weekly: Option<QuotaInfo> = None;
-        let mut gemini_five_hour: Option<QuotaInfo> = None;
-        let mut claude_weekly: Option<QuotaInfo> = None;
-        let mut claude_five_hour: Option<QuotaInfo> = None;
+        // Antigravity reports one quota per model. The (High)/(Low)/(Medium)/
+        // (Thinking) suffixes are reasoning levels — NOT time windows — and every
+        // variant in a family shares the same quota and reset time. Collapse each
+        // family to its most-restrictive window: Gemini, and everything else
+        // (Claude + GPT).
+        let mut gemini: Option<QuotaInfo> = None;
+        let mut other: Option<QuotaInfo> = None;
 
         for config in model_configs {
             let Some(quota) = &config.quota_info else {
@@ -357,53 +358,35 @@ impl AntigravityProvider {
                 continue;
             }
 
-            let is_gemini = label.to_lowercase().contains("gemini");
-            let is_weekly = label.to_lowercase().contains("(low)");
-
-            let target = if is_gemini {
-                if is_weekly {
-                    &mut gemini_weekly
-                } else {
-                    &mut gemini_five_hour
-                }
+            let target = if label.to_lowercase().contains("gemini") {
+                &mut gemini
             } else {
-                if is_weekly {
-                    &mut claude_weekly
-                } else {
-                    &mut claude_five_hour
-                }
+                &mut other
             };
 
-            // Keep the one with the minimum remaining_fraction (most restrictive)
-            if let Some(existing) = target {
-                let existing_rem = existing.remaining_fraction.unwrap_or(1.0);
-                let new_rem = quota.remaining_fraction.unwrap_or(1.0);
-                if new_rem < existing_rem {
-                    *existing = quota.clone();
-                }
-            } else {
+            // Keep the most restrictive (lowest remaining fraction) in the family.
+            // A missing remaining_fraction means the model is exhausted (see
+            // rate_window_from_quota_opt), so treat absent as 0.0.
+            let more_restrictive = target.as_ref().is_none_or(|existing| {
+                remaining_fraction(quota) < remaining_fraction(existing)
+            });
+            if more_restrictive {
                 *target = Some(quota.clone());
             }
         }
 
-        let primary = rate_window_from_quota_opt(gemini_weekly.as_ref());
-        let secondary = rate_window_from_quota_opt(gemini_five_hour.as_ref());
+        let primary = rate_window_from_quota_opt(gemini.as_ref());
+        let mut snapshot = UsageSnapshot::new(primary);
 
-        let mut snapshot = UsageSnapshot::new(primary).with_secondary(secondary);
-
-        let claude_weekly_win = rate_window_from_quota_opt(claude_weekly.as_ref());
-        let claude_five_hour_win = rate_window_from_quota_opt(claude_five_hour.as_ref());
-
-        snapshot = snapshot.with_extra_rate_window(
-            "claude-gpt-weekly",
-            "Claude & GPT Models: Weekly Limit",
-            claude_weekly_win,
-        );
-        snapshot = snapshot.with_extra_rate_window(
-            "claude-gpt-five-hour",
-            "Claude & GPT Models: Five Hour Limit",
-            claude_five_hour_win,
-        );
+        // Only surface the Claude & GPT row when the account actually has those
+        // models — otherwise we'd render a misleading "0% used" placeholder bar.
+        if let Some(quota) = other.as_ref() {
+            snapshot = snapshot.with_extra_rate_window(
+                "claude-gpt",
+                "Claude & GPT Models",
+                rate_window_from_quota_opt(Some(quota)),
+            );
+        }
 
         // Add plan info
         let plan_name = user_status
@@ -532,11 +515,17 @@ fn model_label(config: &ModelConfig) -> &str {
     }
 }
 
+/// Remaining fraction for a quota. Antigravity OMITS `remaining_fraction` once a
+/// model family is exhausted (only `reset_time` survives), so a missing value
+/// means 0 remaining — NOT full.
+fn remaining_fraction(quota: &QuotaInfo) -> f64 {
+    quota.remaining_fraction.unwrap_or(0.0).clamp(0.0, 1.0)
+}
+
 fn rate_window_from_quota_opt(quota: Option<&QuotaInfo>) -> RateWindow {
     match quota {
         Some(q) => {
-            let remaining = q.remaining_fraction.unwrap_or(1.0);
-            let used_percent = (1.0 - remaining) * 100.0;
+            let used_percent = (1.0 - remaining_fraction(q)) * 100.0;
             RateWindow::with_details(used_percent, None, None, q.reset_time.clone())
         }
         None => RateWindow::new(0.0),
@@ -580,27 +569,67 @@ mod tests {
         let provider = AntigravityProvider::new();
         let snap = provider.parse_user_status(resp).unwrap();
 
-        // Gemini Weekly: lowest of Gemini low configs (0.6, 0.7) -> 0.6. used = (1 - 0.6) * 100 = 40%
-        assert!((snap.primary.used_percent - 40.0).abs() < 0.1);
+        // Gemini family, most restrictive remaining = 0.4 -> used = (1 - 0.4) * 100 = 60%.
+        assert!((snap.primary.used_percent - 60.0).abs() < 0.1);
+        // Reasoning-level variants are not separate time windows: no secondary.
+        assert!(snap.secondary.is_none());
 
-        // Gemini Five Hour: lowest of Gemini high/medium configs (0.5, 0.55, 0.4) -> 0.4. used = (1 - 0.4) * 100 = 60%
-        let sec = snap.secondary.unwrap();
-        assert!((sec.used_percent - 60.0).abs() < 0.1);
-
-        // Claude & GPT Weekly: none matched -> default 0% used
-        let extra_weekly = snap
+        // Claude & GPT family collapse into a single window; most restrictive
+        // remaining = 0.8 -> used = (1 - 0.8) * 100 = 20%.
+        assert_eq!(snap.extra_rate_windows.len(), 1);
+        let claude = snap
             .extra_rate_windows
             .iter()
-            .find(|w| w.id == "claude-gpt-weekly")
+            .find(|w| w.id == "claude-gpt")
             .unwrap();
-        assert!((extra_weekly.window.used_percent - 0.0).abs() < 0.1);
+        assert!((claude.window.used_percent - 20.0).abs() < 0.1);
+    }
 
-        // Claude & GPT Five Hour: lowest of (0.8, 0.9, 0.85) -> 0.8. used = (1 - 0.8) * 100 = 20%
-        let extra_five_hour = snap
+    #[test]
+    fn test_missing_remaining_fraction_means_exhausted() {
+        // Antigravity drops `remainingFraction` once a family is exhausted,
+        // leaving only `resetTime`. That must read as 100% used, not 0%.
+        let json = serde_json::json!({
+            "userStatus": {
+                "cascadeModelConfigData": {
+                    "clientModelConfigs": [
+                        { "label": "Gemini 3.5 Flash (High)",
+                          "quotaInfo": { "remainingFraction": 1.0, "resetTime": "2026-06-15T03:41:46Z" } },
+                        { "label": "Claude Opus 4.6 (Thinking)",
+                          "quotaInfo": { "resetTime": "2026-06-15T01:27:23Z" } },
+                        { "label": "GPT-OSS 120B (Medium)",
+                          "quotaInfo": { "resetTime": "2026-06-15T01:27:23Z" } }
+                    ]
+                }
+            }
+        });
+        let resp: UserStatusResponse = serde_json::from_value(json).unwrap();
+        let snap = AntigravityProvider::new().parse_user_status(resp).unwrap();
+
+        // Gemini full -> 0% used.
+        assert!((snap.primary.used_percent - 0.0).abs() < 0.1);
+
+        // Claude & GPT have no remaining fraction -> exhausted (100% used).
+        let claude = snap
             .extra_rate_windows
             .iter()
-            .find(|w| w.id == "claude-gpt-five-hour")
+            .find(|w| w.id == "claude-gpt")
             .unwrap();
-        assert!((extra_five_hour.window.used_percent - 20.0).abs() < 0.1);
+        assert!((claude.window.used_percent - 100.0).abs() < 0.1);
+        assert!(claude.window.is_exhausted());
+    }
+
+    #[test]
+    fn test_no_claude_window_when_account_has_only_gemini() {
+        let resp = make_response(vec![
+            ("Gemini 3.5 Flash (Low)", 0.6),
+            ("Gemini 3.1 Pro (High)", 0.5),
+        ]);
+        let snap = AntigravityProvider::new().parse_user_status(resp).unwrap();
+
+        // Gemini most restrictive remaining = 0.5 -> 50% used.
+        assert!((snap.primary.used_percent - 50.0).abs() < 0.1);
+        // No Claude/GPT models -> no placeholder window (avoids a fake 0% bar).
+        assert!(snap.extra_rate_windows.is_empty());
     }
 }
