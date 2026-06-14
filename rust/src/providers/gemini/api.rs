@@ -27,10 +27,19 @@ impl GeminiApi {
     /// Fetch quota information from the Gemini API
     /// Returns (primary RateWindow, optional model-specific RateWindow, optional email)
     /// Note: Gemini quota API requires OAuth tokens, not API keys
+    #[allow(clippy::type_complexity)]
     pub async fn fetch_quota(
         &self,
         _ctx: &FetchContext,
-    ) -> Result<(RateWindow, Option<RateWindow>, Option<String>), ProviderError> {
+    ) -> Result<
+        (
+            RateWindow,
+            Option<RateWindow>,
+            Vec<(String, String, RateWindow)>,
+            Option<String>,
+        ),
+        ProviderError,
+    > {
         // Gemini quota endpoint requires OAuth credentials (not API keys)
         // Always load OAuth credentials from ~/.gemini/oauth_creds.json
         let mut creds = self.load_credentials()?;
@@ -391,11 +400,20 @@ impl GeminiApi {
         })
     }
 
+    #[allow(clippy::type_complexity)]
     fn parse_quota_response(
         &self,
         response: QuotaResponse,
         creds: Option<&OAuthCredentials>,
-    ) -> Result<(RateWindow, Option<RateWindow>, Option<String>), ProviderError> {
+    ) -> Result<
+        (
+            RateWindow,
+            Option<RateWindow>,
+            Vec<(String, String, RateWindow)>,
+            Option<String>,
+        ),
+        ProviderError,
+    > {
         let buckets = response
             .buckets
             .ok_or_else(|| ProviderError::Parse("No quota buckets in response".to_string()))?;
@@ -468,12 +486,29 @@ impl GeminiApi {
             None
         };
 
+        // Extract all extra model rate windows
+        let mut extra_windows = Vec::new();
+        for (model_id, (fraction, reset_time)) in &model_quotas {
+            let title = clean_model_id(model_id);
+            let id = model_window_id(model_id);
+            let percent_used = (1.0 - fraction) * 100.0;
+            let reset_at = reset_time.as_ref().and_then(|s| parse_iso_date(s));
+            let window = RateWindow::with_details(
+                percent_used,
+                Some(1440), // 24 hours
+                reset_at,
+                None,
+            );
+            extra_windows.push((id, title, window));
+        }
+        extra_windows.sort_by(|a, b| a.0.cmp(&b.0));
+
         // Extract email from ID token
         let email = creds
             .and_then(|c| c.id_token.as_ref())
             .and_then(|token| extract_email_from_jwt(token));
 
-        Ok((primary, model_specific, email))
+        Ok((primary, model_specific, extra_windows, email))
     }
 }
 
@@ -533,6 +568,44 @@ struct QuotaBucket {
 }
 
 // --- Helper functions ---
+
+fn clean_model_id(model_id: &str) -> String {
+    let mut out = model_id.trim().replace(['_', '-'], " ");
+    while out.contains("  ") {
+        out = out.replace("  ", " ");
+    }
+    let words: Vec<String> = out
+        .split_whitespace()
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(first) => {
+                    let mut s = first.to_uppercase().to_string();
+                    s.push_str(&chars.as_str().to_lowercase());
+                    s
+                }
+            }
+        })
+        .collect();
+    words.join(" ")
+}
+
+fn model_window_id(model_id: &str) -> String {
+    let slug = model_id
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string();
+    format!("model-{}", if slug.is_empty() { "unknown" } else { &slug })
+}
 
 fn parse_iso_date(s: &str) -> Option<DateTime<Utc>> {
     // Try with fractional seconds first

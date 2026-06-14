@@ -60,10 +60,10 @@ impl Provider for GeminiProvider {
         tracing::debug!("Fetching Gemini usage via API");
 
         match self.api.fetch_quota(ctx).await {
-            Ok((primary, flash_quota, email)) => {
+            Ok((primary, _flash_quota, extra_windows, email)) => {
                 let mut usage = UsageSnapshot::new(primary);
-                if let Some(flash) = flash_quota {
-                    usage = usage.with_extra_rate_window("gemini-flash", "Gemini Flash", flash);
+                for (id, title, window) in extra_windows {
+                    usage = usage.with_extra_rate_window(id, title, window);
                 }
                 if let Some(e) = email {
                     usage = usage.with_email(e);
