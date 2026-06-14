@@ -23,7 +23,7 @@ A Windows port of [CodexBar](https://github.com/steipete/CodexBar) - a system tr
 
 ### From Release
 
-Download the latest release from the [Releases](https://github.com/Finesssee/Win-CodexBar/releases) page.
+Download the latest release from the [Releases](https://github.com/schaefdi/Win-CodexBar/releases) page.
 
 - Recommended: `CodexBar-<version>-Setup.exe`
   - This installer now installs the required Microsoft Visual C++ runtime and Microsoft Edge WebView2 Runtime on clean Windows machines before launching CodexBar.
@@ -42,7 +42,7 @@ Requirements:
 
 ```powershell
 # Clone the repository
-git clone https://github.com/Finesssee/Win-CodexBar.git
+git clone https://github.com/schaefdi/Win-CodexBar.git
 cd Win-CodexBar/rust
 
 # Build release version

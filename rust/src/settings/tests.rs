@@ -5,6 +5,7 @@ fn test_settings_default() {
     let settings = Settings::default();
     assert!(settings.enabled_providers.contains("claude"));
     assert!(settings.enabled_providers.contains("codex"));
+    assert!(settings.enabled_providers.contains("gemini"));
     assert_eq!(settings.refresh_interval_secs, 300);
     assert!(settings.show_notifications);
     assert_eq!(settings.high_usage_threshold, 70.0);
@@ -107,7 +108,7 @@ fn test_settings_provider_enabled() {
     let settings = Settings::default();
     assert!(settings.is_provider_enabled(ProviderId::Claude));
     assert!(settings.is_provider_enabled(ProviderId::Codex));
-    assert!(!settings.is_provider_enabled(ProviderId::Gemini));
+    assert!(settings.is_provider_enabled(ProviderId::Gemini));
 }
 
 #[test]
@@ -134,6 +135,7 @@ fn test_settings_get_enabled_provider_ids() {
     let enabled = settings.get_enabled_provider_ids();
     assert!(enabled.contains(&ProviderId::Claude));
     assert!(enabled.contains(&ProviderId::Codex));
+    assert!(enabled.contains(&ProviderId::Gemini));
 }
 
 #[test]
@@ -147,7 +149,7 @@ fn test_settings_get_all_providers_status() {
     assert!(claude_status.enabled);
 
     let gemini_status = status.iter().find(|s| s.id == "gemini").unwrap();
-    assert!(!gemini_status.enabled);
+    assert!(gemini_status.enabled);
 }
 
 #[test]

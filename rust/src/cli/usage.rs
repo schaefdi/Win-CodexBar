@@ -420,6 +420,7 @@ fn append_usage_window_lines(
         use_color,
     );
     append_model_specific_line(lines, usage.model_specific.as_ref(), use_color);
+    append_extra_rate_window_lines(lines, &usage.extra_rate_windows, use_color);
 }
 
 fn append_window_line(lines: &mut Vec<String>, label: &str, window: &RateWindow, use_color: bool) {
@@ -470,6 +471,16 @@ fn append_model_specific_line(
     }
 }
 
+fn append_extra_rate_window_lines(
+    lines: &mut Vec<String>,
+    extras: &[crate::core::NamedRateWindow],
+    use_color: bool,
+) {
+    for extra in extras {
+        append_window_line(lines, &extra.title, &extra.window, use_color);
+    }
+}
+
 fn append_cost_line(lines: &mut Vec<String>, cost: Option<&CostSnapshot>) {
     let Some(cost) = cost else {
         return;
@@ -514,5 +525,26 @@ fn render_progress_bar(percent: f64, width: usize, use_color: bool) -> String {
         format!("{}{}\x1b[0m", color, bar)
     } else {
         bar
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn render_text_prints_named_extra_rate_windows() {
+        let usage = UsageSnapshot::new(RateWindow::new(10.0)).with_extra_rate_window(
+            "gemini-flash",
+            "Gemini Flash",
+            RateWindow::new(20.0),
+        );
+        let result = ProviderFetchResult::new(usage, "cli");
+
+        let text = render_text(ProviderId::Gemini, &result, false);
+
+        assert!(text.contains("Gemini Pro:"));
+        assert!(text.contains("Gemini Flash:"));
+        assert!(!text.contains("Opus:"));
     }
 }

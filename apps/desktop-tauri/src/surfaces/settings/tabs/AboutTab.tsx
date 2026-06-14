@@ -10,15 +10,15 @@ import codexbarIcon from "../../../assets/codexbar-icon.png";
 const ABOUT_LINKS = [
   {
     label: "GitHub",
-    url: "https://github.com/Finesssee/Win-CodexBar",
+    url: "https://github.com/schaefdi/Win-CodexBar",
   },
   {
-    label: "Website",
-    url: "https://codexbar.app",
+    label: "Releases",
+    url: "https://github.com/schaefdi/Win-CodexBar/releases",
   },
   {
-    label: "Original Project",
-    url: "https://github.com/steipete/CodexBar",
+    label: "Issues",
+    url: "https://github.com/schaefdi/Win-CodexBar/issues",
   },
 ] as const;
 
@@ -188,15 +188,17 @@ export default function AboutTab({ settings, set, saving }: TabProps) {
       </div>
 
       <p className="about-copyright">
-        Windows port by NessZerra. Based on{" "}
+        Windows port by NessZerra. Project home:{" "}
         <button
           type="button"
           className="about-link about-link--inline"
-          onClick={() => openAboutLink("https://github.com/steipete/CodexBar")}
+          onClick={() =>
+            openAboutLink("https://github.com/schaefdi/Win-CodexBar")
+          }
         >
-          CodexBar
+          Win-CodexBar
         </button>{" "}
-        by steipete. MIT License.
+        on GitHub. MIT License.
       </p>
     </section>
   );

@@ -238,7 +238,7 @@ pub fn open_release_page(state: tauri::State<'_, Mutex<AppState>>) -> Result<(),
             .update_info
             .as_ref()
             .map(|info| info.release_url.clone())
-            .ok_or("No update information available")?
+            .unwrap_or_else(codexbar::updater::release_page_url)
     };
     open_url_in_browser(&url)
 }

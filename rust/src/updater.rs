@@ -7,8 +7,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::watch;
 
-const GITHUB_REPO: &str = "Finesssee/Win-CodexBar";
+const GITHUB_REPO: &str = "schaefdi/Win-CodexBar";
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+pub fn release_page_url() -> String {
+    format!("https://github.com/{GITHUB_REPO}/releases")
+}
 
 /// State of the update download process
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -567,10 +571,26 @@ mod tests {
     }
 
     #[test]
+    fn release_urls_point_to_win_codexbar_repo() {
+        assert_eq!(
+            release_page_url(),
+            "https://github.com/schaefdi/Win-CodexBar/releases"
+        );
+        assert_eq!(
+            release_url(UpdateChannel::Stable),
+            "https://api.github.com/repos/schaefdi/Win-CodexBar/releases/latest"
+        );
+        assert_eq!(
+            release_url(UpdateChannel::Beta),
+            "https://api.github.com/repos/schaefdi/Win-CodexBar/releases"
+        );
+    }
+
+    #[test]
     fn prefers_installer_asset_for_auto_update() {
         let release = GitHubRelease {
             tag_name: "v1.2.6".to_string(),
-            html_url: "https://github.com/Finesssee/Win-CodexBar/releases/tag/v1.2.6".to_string(),
+            html_url: "https://github.com/schaefdi/Win-CodexBar/releases/tag/v1.2.6".to_string(),
             body: None,
             assets: vec![
                 GitHubAsset {
@@ -606,7 +626,7 @@ mod tests {
     fn falls_back_to_manual_release_when_only_portable_exe_exists() {
         let release = GitHubRelease {
             tag_name: "v1.2.6".to_string(),
-            html_url: "https://github.com/Finesssee/Win-CodexBar/releases/tag/v1.2.6".to_string(),
+            html_url: "https://github.com/schaefdi/Win-CodexBar/releases/tag/v1.2.6".to_string(),
             body: None,
             assets: vec![GitHubAsset {
                 name: "codexbar.exe".to_string(),
@@ -621,7 +641,7 @@ mod tests {
 
         assert_eq!(
             update.download_url,
-            "https://github.com/Finesssee/Win-CodexBar/releases/tag/v1.2.6"
+            "https://github.com/schaefdi/Win-CodexBar/releases/tag/v1.2.6"
         );
         assert!(!update.supports_auto_apply());
     }

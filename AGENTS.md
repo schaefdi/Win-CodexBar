@@ -61,7 +61,7 @@
 ## Release & Winget Notes
 - Treat Winget updates as a normal release step after GitHub release artifacts are stable.
 - Winget does not track "latest" GitHub releases; every version needs its own immutable manifest folder in
-  `microsoft/winget-pkgs`, for example `manifests/f/Finesssee/Win-CodexBar/0.23.6/`.
+  `microsoft/winget-pkgs`, for example `manifests/s/schaefdi/Win-CodexBar/0.23.6/`.
 - For routine version bumps, copy the previous approved manifest folder and change only version-specific fields:
   `PackageVersion`, `InstallerUrl`, `InstallerSha256`, `DisplayName`, `DisplayVersion`, `ReleaseNotes`, and
   `ReleaseNotesUrl`.

@@ -5,7 +5,7 @@ edition = "2024"
 authors = ["CodexBar Contributors"]
 description = "Windows and WSL system tray app for monitoring AI provider usage limits"
 license = "MIT"
-repository = "https://github.com/Finesssee/Win-CodexBar"
+repository = "https://github.com/schaefdi/Win-CodexBar"
 keywords = ["ai", "usage", "monitoring", "claude", "codex"]
 categories = ["command-line-utilities"]
 

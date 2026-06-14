@@ -30,16 +30,16 @@ Win-CodexBar is a Windows system-tray app for keeping AI coding-tool usage visib
 Install with Windows Package Manager:
 
 ```powershell
-winget install Finesssee.Win-CodexBar
+winget install schaefdi.Win-CodexBar
 ```
 
-Or download the latest installer/portable build from [GitHub Releases](https://github.com/Finesssee/Win-CodexBar/releases).
+Or download the latest installer/portable build from [GitHub Releases](https://github.com/schaefdi/Win-CodexBar/releases).
 
 - Installer: `CodexBar-<version>-Setup.exe`
 - Portable: `CodexBar-<version>-portable.exe`
 - Checksums: each release includes `.sha256` files
 
-Winget distribution is approved through [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs/tree/master/manifests/f/Finesssee/Win-CodexBar). New versions can take a little time to appear because every Winget update is pinned to a specific release URL and installer hash.
+Winget distribution is approved through [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs/tree/master/manifests/s/schaefdi/Win-CodexBar). New versions can take a little time to appear because every Winget update is pinned to a specific release URL and installer hash.
 
 ## First Run
 
@@ -118,7 +118,7 @@ See the full history in [CHANGELOG.md](CHANGELOG.md).
 
 ```powershell
 # Prerequisites: Node.js + pnpm. Rust and MinGW are installed by the script when needed.
-git clone https://github.com/Finesssee/Win-CodexBar.git
+git clone https://github.com/schaefdi/Win-CodexBar.git
 cd Win-CodexBar
 .\dev.ps1
 ```

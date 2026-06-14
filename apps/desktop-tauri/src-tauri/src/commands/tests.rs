@@ -70,8 +70,8 @@ fn bootstrap_contract_lists_current_surface_commands() {
 #[test]
 fn external_url_validation_allows_only_http_urls() {
     assert_eq!(
-        validate_external_url(" https://github.com/Finesssee/Win-CodexBar ").unwrap(),
-        "https://github.com/Finesssee/Win-CodexBar"
+        validate_external_url(" https://github.com/schaefdi/Win-CodexBar ").unwrap(),
+        "https://github.com/schaefdi/Win-CodexBar"
     );
     assert_eq!(
         validate_external_url("http://codexbar.app").unwrap(),
@@ -1002,8 +1002,8 @@ fn open_path_rejects_missing_path() {
 #[test]
 fn external_url_validator_accepts_http_and_https() {
     assert_eq!(
-        super::validate_external_url(" https://github.com/Finesssee/Win-CodexBar "),
-        Ok("https://github.com/Finesssee/Win-CodexBar")
+        super::validate_external_url(" https://github.com/schaefdi/Win-CodexBar "),
+        Ok("https://github.com/schaefdi/Win-CodexBar")
     );
     assert_eq!(
         super::validate_external_url("http://localhost:1420"),

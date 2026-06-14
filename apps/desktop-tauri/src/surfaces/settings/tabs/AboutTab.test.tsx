@@ -94,20 +94,20 @@ describe("AboutTab", () => {
     render(<AboutTab settings={settings} set={vi.fn()} saving={false} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "GitHub" }));
-    fireEvent.click(screen.getByRole("button", { name: "Website" }));
-    fireEvent.click(screen.getByRole("button", { name: "Original Project" }));
+    fireEvent.click(screen.getByRole("button", { name: "Releases" }));
+    fireEvent.click(screen.getByRole("button", { name: "Issues" }));
 
     expect(tauriMocks.openExternalUrl).toHaveBeenNthCalledWith(
       1,
-      "https://github.com/Finesssee/Win-CodexBar",
+      "https://github.com/schaefdi/Win-CodexBar",
     );
     expect(tauriMocks.openExternalUrl).toHaveBeenNthCalledWith(
       2,
-      "https://codexbar.app",
+      "https://github.com/schaefdi/Win-CodexBar/releases",
     );
     expect(tauriMocks.openExternalUrl).toHaveBeenNthCalledWith(
       3,
-      "https://github.com/steipete/CodexBar",
+      "https://github.com/schaefdi/Win-CodexBar/issues",
     );
   });
 
@@ -116,7 +116,7 @@ describe("AboutTab", () => {
 
     render(<AboutTab settings={settings} set={vi.fn()} saving={false} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Website" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Releases" }));
 
     await waitFor(() => {
       expect(screen.getByText("Error: no browser")).toBeInTheDocument();

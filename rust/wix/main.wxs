@@ -165,7 +165,7 @@
         <!--<Icon Id='ProductICO' SourceFile='wix\Product.ico'/>-->
         <!--<Property Id='ARPPRODUCTICON' Value='ProductICO' />-->
 
-        <Property Id='ARPHELPLINK' Value='https://github.com/Finesssee/Win-CodexBar'/>
+        <Property Id='ARPHELPLINK' Value='https://github.com/schaefdi/Win-CodexBar'/>
         
         <UI>
             <UIRef Id='WixUI_FeatureTree'/>

@@ -92,7 +92,7 @@
 
 ```powershell
 # 前置要求：Node.js + pnpm — Rust 和 MinGW 将自动安装
-git clone https://github.com/Finesssee/Win-CodexBar.git
+git clone https://github.com/schaefdi/Win-CodexBar.git
 cd Win-CodexBar
 .\dev.ps1
 ```
@@ -109,12 +109,12 @@ cd Win-CodexBar
 使用 Windows Package Manager 安装：
 
 ```powershell
-winget install Finesssee.Win-CodexBar
+winget install schaefdi.Win-CodexBar
 ```
 
-Winget 分发已通过 [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs/tree/master/manifests/f/Finesssee/Win-CodexBar) 审核。GitHub Release 发布后，新版本可能需要一点时间才会出现在 Winget 中，因为每个版本都要固定自己的安装包 URL 和 SHA-256 哈希。
+Winget 分发已通过 [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs/tree/master/manifests/s/schaefdi/Win-CodexBar) 审核。GitHub Release 发布后，新版本可能需要一点时间才会出现在 Winget 中，因为每个版本都要固定自己的安装包 URL 和 SHA-256 哈希。
 
-也可以前往 [GitHub Releases](https://github.com/Finesssee/Win-CodexBar/releases) 下载最新版本。
+也可以前往 [GitHub Releases](https://github.com/schaefdi/Win-CodexBar/releases) 下载最新版本。
 
 - **安装包**：`CodexBar-<version>-Setup.exe`
 - **便携版**：`CodexBar-<version>-portable.exe`
