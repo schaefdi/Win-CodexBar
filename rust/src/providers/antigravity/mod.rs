@@ -39,8 +39,8 @@ impl AntigravityProvider {
         }
     }
 
-    /// Detect running Antigravity language server and extract connection info
-    fn detect_process_info() -> Result<ProcessInfo, ProviderError> {
+    /// Detect running Antigravity language server processes and extract connection info
+    fn detect_all_process_info() -> Result<Vec<ProcessInfo>, ProviderError> {
         // Use PowerShell to get process command lines
         #[cfg(windows)]
         const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -78,6 +78,7 @@ impl AntigravityProvider {
         let port_regex = PORT_RE
             .get_or_init(|| Regex::new(r"--extension_server_port\s+(\d+)").expect("valid regex"));
 
+        let mut processes = Vec::new();
         for line in stdout.lines() {
             if line.contains("language_server_windows") && line.contains("--csrf_token") {
                 // Line is "<pid>\t<command line>"; split off the PID prefix we added so the
@@ -103,7 +104,7 @@ impl AntigravityProvider {
                     .and_then(|m| m.as_str().parse::<u16>().ok());
 
                 if let (Some(token), Some(p)) = (csrf_token, port) {
-                    return Ok(ProcessInfo {
+                    processes.push(ProcessInfo {
                         csrf_token: token,
                         extension_server_csrf_token: ext_csrf_token,
                         extension_port: p,
@@ -113,23 +114,19 @@ impl AntigravityProvider {
             }
         }
 
-        Err(ProviderError::NotInstalled(
-            "Antigravity language server not running".to_string(),
-        ))
+        if processes.is_empty() {
+            Err(ProviderError::NotInstalled(
+                "Antigravity language server not running".to_string(),
+            ))
+        } else {
+            Ok(processes)
+        }
     }
 
-    /// Find the actual API port by probing the language server's candidate ports.
-    async fn find_api_port(extension_port: u16, pid: Option<u32>) -> Result<u16, ProviderError> {
-        // The language server binds a RANDOM localhost port at startup; --extension_server_port
-        // is only a reference point (and belongs to a separate HTTP extension server), so the
-        // real gRPC/Connect API port is not guaranteed to be within a small window above it.
-        // Mirror the macOS/Linux probe (which uses `lsof`) by enumerating the language-server
-        // process's own listening ports first, then fall back to a heuristic window above the
-        // extension port and a few historically-seen ports.
-        //
-        // SECURITY: TLS verification is disabled because the local language server uses a
-        // self-signed certificate. This is scoped to 127.0.0.1 only; we confirm a port by
-        // checking that it answers the expected gRPC endpoint.
+    /// Find a working API port and its associated ProcessInfo by probing candidates in parallel.
+    async fn find_working_api_port(
+        processes: Vec<ProcessInfo>,
+    ) -> Result<(u16, ProcessInfo), ProviderError> {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(2))
             .danger_accept_invalid_certs(true)
@@ -137,30 +134,42 @@ impl AntigravityProvider {
             .build()
             .map_err(|e| ProviderError::Other(e.to_string()))?;
 
-        // Ordered candidate ports: the process's real listening ports first (Windows
-        // equivalent of `lsof`), then the heuristic window above the extension port, then a
-        // few known ports as a last resort.
-        let mut candidates: Vec<u16> = Vec::new();
-        if let Some(pid) = pid {
-            candidates.extend(Self::listening_ports_for_pid(pid));
-        }
-        candidates.extend((0..20u16).map(|offset| extension_port.saturating_add(offset)));
-        candidates.extend([53835, 53836, 53837, 53838, 53845, 53849]);
-
-        let mut probed: Vec<u16> = Vec::new();
-        for port in candidates {
-            if probed.contains(&port) {
-                continue; // probe each port at most once
+        let mut futures = Vec::new();
+        for proc in processes {
+            let mut candidates: Vec<u16> = Vec::new();
+            if let Some(pid) = proc.pid {
+                candidates.extend(Self::listening_ports_for_pid(pid));
             }
-            probed.push(port);
-            if Self::probe_api_port(&client, port).await {
-                return Ok(port);
+            candidates.extend((0..20u16).map(|offset| proc.extension_port.saturating_add(offset)));
+            candidates.extend([53835, 53836, 53837, 53838, 53845, 53849]);
+            candidates.sort_unstable();
+            candidates.dedup();
+
+            for port in candidates {
+                let client_clone = client.clone();
+                let proc_clone = proc.clone();
+                futures.push(async move {
+                    if Self::probe_api_port(&client_clone, port).await {
+                        Some((port, proc_clone))
+                    } else {
+                        None
+                    }
+                });
             }
         }
 
-        Err(ProviderError::Other(
-            "Could not find Antigravity API port".to_string(),
-        ))
+        if futures.is_empty() {
+            return Err(ProviderError::Other("No candidate ports found".to_string()));
+        }
+
+        let results = futures::future::join_all(futures).await;
+        if let Some(working) = results.into_iter().flatten().next() {
+            Ok(working)
+        } else {
+            Err(ProviderError::Other(
+                "Could not find Antigravity API port".to_string(),
+            ))
+        }
     }
 
     /// Probe a single candidate port. Returns true if it answers the language server's
@@ -231,8 +240,8 @@ impl AntigravityProvider {
 
     /// Fetch user status from Antigravity API
     async fn fetch_user_status(&self) -> Result<UsageSnapshot, ProviderError> {
-        let process_info = Self::detect_process_info()?;
-        let api_port = Self::find_api_port(process_info.extension_port, process_info.pid).await?;
+        let processes = Self::detect_all_process_info()?;
+        let (api_port, process_info) = Self::find_working_api_port(processes).await?;
 
         // SECURITY: TLS verification disabled for local language server (see find_api_port)
         let client = reqwest::Client::builder()
@@ -309,6 +318,11 @@ impl AntigravityProvider {
             .json()
             .await
             .map_err(|e| ProviderError::Other(format!("Failed to parse response: {}", e)))?;
+
+        let _ = std::fs::write(
+            "antigravity_raw.json",
+            serde_json::to_string_pretty(&raw_val).unwrap(),
+        );
 
         let json: UserStatusResponse = serde_json::from_value(raw_val)
             .map_err(|e| ProviderError::Other(format!("Failed to parse response: {}", e)))?;
@@ -446,6 +460,7 @@ impl Provider for AntigravityProvider {
     }
 }
 
+#[derive(Clone, Debug)]
 struct ProcessInfo {
     csrf_token: String,
     extension_server_csrf_token: Option<String>,

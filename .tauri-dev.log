@@ -1,0 +1,125 @@
+     Running BeforeDevCommand (`pnpm run dev`)
+
+> desktop-tauri@0.32.6 dev C:\Users\Dieter\Programming\Win-CodexBar\apps\desktop-tauri
+> vite
+
+
+  [32m[1mVITE[22m v6.4.2[39m  [2mready in [0m[1m1710[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m1420[22m/[39m
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Dieter\Programming\Win-CodexBar\rust\Cargo.toml
+workspace: C:\Users\Dieter\Programming\Win-CodexBar\Cargo.toml
+        Info Watching C:\Users\Dieter\Programming\Win-CodexBar\apps\desktop-tauri\src-tauri for changes...
+        Info Watching C:\Users\Dieter\Programming\Win-CodexBar\rust for changes...
+   Compiling codexbar v0.32.6 (C:\Users\Dieter\Programming\Win-CodexBar\rust)
+    Building [=======================> ] 553/556: codexba…
+    Building [=======================> ] 554/556: codexbar
+                                                            
+   Compiling codexbar-desktop-tauri v0.32.6 (C:\Users\Dieter\Programming\Win-CodexBar\apps\desktop-tauri\src-tauri)
+    Building [=======================> ] 555/556: codexba…
+                                                            
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 30.95s
+     Running `C:\Users\Dieter\Programming\Win-CodexBar\target\debug\codexbar-desktop-tauri.exe`
+2026-06-14T17:30:03.787357Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: inner=0x12079c root=0x12079c
+2026-06-14T17:30:03.787746Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: dark_mode=0x0 caption_color=0x0
+2026-06-14T17:30:03.788093Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: extend_frame=0x0
+2026-06-14T17:30:03.788193Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: subclass installed=1
+2026-06-14T17:30:03.788580Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: stripped WS_CAPTION/WS_THICKFRAME
+2026-06-14T17:30:05.089526Z  INFO codexbar_desktop_tauri::shortcut_bridge: Registered global shortcut: Ctrl+Shift+U
+2026-06-14T17:32:45.078392Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: inner=0x12079c root=0x12079c
+2026-06-14T17:32:45.078653Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: dark_mode=0x0 caption_color=0x0
+2026-06-14T17:32:45.078950Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: extend_frame=0x0
+2026-06-14T17:32:45.079071Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: subclass installed=1
+2026-06-14T17:34:40.572617Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: inner=0x12079c root=0x12079c
+2026-06-14T17:34:40.572821Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: dark_mode=0x0 caption_color=0x0
+2026-06-14T17:34:40.573372Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: extend_frame=0x0
+2026-06-14T17:34:40.573617Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: subclass installed=1
+2026-06-14T17:34:40.581129Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: stripped WS_CAPTION/WS_THICKFRAME
+2026-06-14T17:41:36.994471Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: inner=0x12079c root=0x12079c
+2026-06-14T17:41:36.994845Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: dark_mode=0x0 caption_color=0x0
+2026-06-14T17:41:36.995134Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: extend_frame=0x0
+2026-06-14T17:41:36.995210Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: subclass installed=1
+2026-06-14T17:41:36.999710Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: stripped WS_CAPTION/WS_THICKFRAME
+2026-06-14T17:41:44.775295Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: inner=0x12079c root=0x12079c
+2026-06-14T17:41:44.775782Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: dark_mode=0x0 caption_color=0x0
+2026-06-14T17:41:44.776175Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: extend_frame=0x0
+2026-06-14T17:41:44.776335Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: subclass installed=1
+2026-06-14T17:41:44.787002Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: stripped WS_CAPTION/WS_THICKFRAME
+        Info File C:\Users\Dieter\Programming\Win-CodexBar\rust\src\cost_scanner.rs changed. Rebuilding application...
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Dieter\Programming\Win-CodexBar\rust\Cargo.toml
+workspace: C:\Users\Dieter\Programming\Win-CodexBar\Cargo.toml
+   Compiling codexbar v0.32.6 (C:\Users\Dieter\Programming\Win-CodexBar\rust)
+    Building [=======================> ] 553/556: codexba…
+    Building [=======================> ] 554/556: codexbar
+        Info File C:\Users\Dieter\Programming\Win-CodexBar\rust\src\cli\cost.rs changed. Rebuilding application...
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Dieter\Programming\Win-CodexBar\rust\Cargo.toml
+workspace: C:\Users\Dieter\Programming\Win-CodexBar\Cargo.toml
+   Compiling codexbar v0.32.6 (C:\Users\Dieter\Programming\Win-CodexBar\rust)
+    Building [=======================> ] 553/556: codexba…
+    Building [=======================> ] 554/556: codexbar
+        Info File C:\Users\Dieter\Programming\Win-CodexBar\rust\src\cli\cost.rs changed. Rebuilding application...
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Dieter\Programming\Win-CodexBar\rust\Cargo.toml
+workspace: C:\Users\Dieter\Programming\Win-CodexBar\Cargo.toml
+   Compiling codexbar v0.32.6 (C:\Users\Dieter\Programming\Win-CodexBar\rust)
+    Building [=======================> ] 553/556: codexba…
+    Building [=======================> ] 554/556: codexbar
+        Info File src-tauri\src\commands\chart.rs changed. Rebuilding application...
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Dieter\Programming\Win-CodexBar\rust\Cargo.toml
+workspace: C:\Users\Dieter\Programming\Win-CodexBar\Cargo.toml
+   Compiling codexbar v0.32.6 (C:\Users\Dieter\Programming\Win-CodexBar\rust)
+    Building [=======================> ] 553/556: codexba…
+    Building [=======================> ] 554/556: codexbar
+[2m19:43:47[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/MenuCard.tsx[22m
+                                                            
+   Compiling codexbar-desktop-tauri v0.32.6 (C:\Users\Dieter\Programming\Win-CodexBar\apps\desktop-tauri\src-tauri)
+    Building [=======================> ] 555/556: codexba…
+                                                            
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2m 14s
+     Running `C:\Users\Dieter\Programming\Win-CodexBar\target\debug\codexbar-desktop-tauri.exe`
+2026-06-14T17:45:53.098901Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: inner=0x80874 root=0x80874
+2026-06-14T17:45:53.100208Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: dark_mode=0x0 caption_color=0x0
+2026-06-14T17:45:53.102019Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: extend_frame=0x0
+2026-06-14T17:45:53.102315Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: subclass installed=1
+2026-06-14T17:45:53.106889Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: stripped WS_CAPTION/WS_THICKFRAME
+2026-06-14T17:45:55.846151Z  INFO codexbar_desktop_tauri::shortcut_bridge: Registered global shortcut: Ctrl+Shift+U
+        Info File src-tauri\src\commands\chart.rs changed. Rebuilding application...
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Dieter\Programming\Win-CodexBar\rust\Cargo.toml
+workspace: C:\Users\Dieter\Programming\Win-CodexBar\Cargo.toml
+        Info File C:\Users\Dieter\Programming\Win-CodexBar\rust\src\cli\cost.rs changed. Rebuilding application...
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Dieter\Programming\Win-CodexBar\rust\Cargo.toml
+workspace: C:\Users\Dieter\Programming\Win-CodexBar\Cargo.toml
+   Compiling codexbar v0.32.6 (C:\Users\Dieter\Programming\Win-CodexBar\rust)
+    Building [=======================> ] 553/556: codexba…
+    Building [=======================> ] 554/556: codexbar
+                                                            
+   Compiling codexbar-desktop-tauri v0.32.6 (C:\Users\Dieter\Programming\Win-CodexBar\apps\desktop-tauri\src-tauri)
+    Building [=======================> ] 555/556: codexba…
+                                                            
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 49.36s
+     Running `C:\Users\Dieter\Programming\Win-CodexBar\target\debug\codexbar-desktop-tauri.exe`
+2026-06-14T17:52:26.565066Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: inner=0xca043a root=0xca043a
+2026-06-14T17:52:26.565549Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: dark_mode=0x0 caption_color=0x0
+2026-06-14T17:52:26.565965Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: extend_frame=0x0
+2026-06-14T17:52:26.566070Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: subclass installed=1
+2026-06-14T17:52:26.566493Z  INFO codexbar_desktop_tauri::shell::dwm: dwm: stripped WS_CAPTION/WS_THICKFRAME
+2026-06-14T17:52:28.235877Z  INFO codexbar_desktop_tauri::shortcut_bridge: Registered global shortcut: Ctrl+Shift+U
+2026-06-14T17:52:54.249631Z  INFO codexbar::providers::gemini::api: Gemini token refreshed successfully
+2026-06-14T17:52:55.382340Z  WARN codexbar_desktop_tauri::commands::providers: slow provider refresh provider="gemini" fetch_duration_ms=25255
+2026-06-14T18:57:54.801257Z  INFO codexbar::providers::gemini::api: Gemini token refreshed successfully
+2026-06-14T18:57:56.154799Z  WARN codexbar_desktop_tauri::commands::providers: slow provider refresh provider="gemini" fetch_duration_ms=26016
+ ELIFECYCLE  Command failed with exit code 1.
+       Error The "beforeDevCommand" terminated with a non-zero status code.
