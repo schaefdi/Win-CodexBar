@@ -81,6 +81,22 @@ function snapshot(
   };
 }
 
+function antigravitySnapshot(): ProviderUsageSnapshot {
+  return {
+    ...snapshot("antigravity", "Antigravity", 10),
+    // Gemini family is the primary Antigravity window.
+    primary: rateWindow(10),
+    // Non-Gemini family lives in the extra rate windows.
+    extraRateWindows: [
+      {
+        id: "claude-gpt",
+        title: "Claude & GPT Models",
+        window: rateWindow(100, { exhausted: true }),
+      },
+    ],
+  };
+}
+
 function settings(overrides: Partial<SettingsSnapshot> = {}): SettingsSnapshot {
   return {
     enabledProviders: ["claude", "codex"],
@@ -181,7 +197,8 @@ describe("FloatBar", () => {
 
   it("splits Antigravity into a Gemini and a Claude & GPT bubble", async () => {
     const antigravity: ProviderUsageSnapshot = {
-      ...snapshot("antigravity", "Antigravity", 45),
+      ...antigravitySnapshot(),
+      primary: rateWindow(45),
       // Gemini family: weekly 45% used, five-hour exhausted (100%).
       secondary: rateWindow(100, { exhausted: true }),
       // Non-Gemini family lives in the extra rate windows.
@@ -220,6 +237,44 @@ describe("FloatBar", () => {
 
     // The Gemini bubble's exhausted window drives the critical tone.
     expect(container.querySelector(".floatbar__pill--crit")).not.toBeNull();
+  });
+
+  it("does not let a legacy Claude/Codex allowlist hide Antigravity", async () => {
+    tauriMocks.getCachedProviders.mockResolvedValue([
+      snapshot("claude", "Claude", 100, { exhausted: true }),
+      snapshot("codex", "Codex", 10),
+      antigravitySnapshot(),
+    ]);
+    tauriMocks.getSettingsSnapshot.mockResolvedValue(
+      settings({
+        enabledProviders: ["claude", "codex", "antigravity"],
+        floatBarProviderIds: ["claude", "codex"],
+      }),
+    );
+
+    const { container } = renderFloatBar(
+      bootstrap({
+        enabledProviders: ["claude", "codex", "antigravity"],
+        floatBarProviderIds: ["claude", "codex"],
+      }),
+    );
+    await waitFor(() => {
+      expect(container.querySelectorAll(".floatbar__pill").length).toBe(4);
+    });
+
+    const titles = Array.from(container.querySelectorAll(".floatbar__pill")).map(
+      (el) => el.getAttribute("title") ?? "",
+    );
+    expect(titles.some((title) => /Claude: 100% used/.test(title))).toBe(true);
+    expect(titles.some((title) => /Codex: 10% used/.test(title))).toBe(true);
+    expect(
+      titles.some((title) => /Antigravity · Gemini: 10% used/.test(title)),
+    ).toBe(true);
+    expect(
+      titles.some((title) =>
+        /Antigravity · Claude & GPT: 100% used/.test(title),
+      ),
+    ).toBe(true);
   });
 
   it("keeps Antigravity as one bubble when the snapshot errored", async () => {

@@ -33,6 +33,29 @@ interface FloatPill {
   error: string | null;
 }
 
+const LEGACY_DEFAULT_FLOATBAR_FILTER = new Set(["claude", "codex"]);
+
+/**
+ * Early float-bar builds could persist a hidden provider allowlist containing
+ * only the original Claude/Codex defaults. There is still no UI to manage that
+ * list, so treat that exact stale value as "show all enabled" once the user has
+ * more providers active.
+ */
+function isLegacyDefaultFilter(
+  filterIds: string[] | undefined,
+  enabledProviderIds: string[],
+): boolean {
+  if (!filterIds || filterIds.length !== LEGACY_DEFAULT_FLOATBAR_FILTER.size) {
+    return false;
+  }
+  const filter = new Set(filterIds);
+  if (filter.size !== LEGACY_DEFAULT_FLOATBAR_FILTER.size) return false;
+  for (const id of filter) {
+    if (!LEGACY_DEFAULT_FLOATBAR_FILTER.has(id)) return false;
+  }
+  return enabledProviderIds.some((id) => !filter.has(id));
+}
+
 /** Pick the most restrictive (exhausted first, else highest-used) window. */
 function worstWindow(windows: RateWindowSnapshot[]): RateWindowSnapshot {
   return windows.reduce((worst, w) => {
@@ -195,7 +218,11 @@ export default function FloatBar({ state }: { state: BootstrapState }) {
   const pills = useMemo(() => {
     const enabled = new Set(settings.enabledProviders);
     let list = providers.filter((p) => enabled.has(p.providerId));
-    if (filterIds && filterIds.length > 0) {
+    if (
+      filterIds &&
+      filterIds.length > 0 &&
+      !isLegacyDefaultFilter(filterIds, settings.enabledProviders)
+    ) {
       const wanted = new Set(filterIds);
       list = list.filter((p) => wanted.has(p.providerId));
     }
