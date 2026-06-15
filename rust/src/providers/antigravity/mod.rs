@@ -367,9 +367,9 @@ impl AntigravityProvider {
             // Keep the most restrictive (lowest remaining fraction) in the family.
             // A missing remaining_fraction means the model is exhausted (see
             // rate_window_from_quota_opt), so treat absent as 0.0.
-            let more_restrictive = target.as_ref().is_none_or(|existing| {
-                remaining_fraction(quota) < remaining_fraction(existing)
-            });
+            let more_restrictive = target
+                .as_ref()
+                .is_none_or(|existing| remaining_fraction(quota) < remaining_fraction(existing));
             if more_restrictive {
                 *target = Some(quota.clone());
             }
