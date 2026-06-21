@@ -250,10 +250,12 @@ impl CostSnapshot {
 
 /// Format a value as currency
 fn format_currency(value: f64, currency_code: &str) -> String {
-    match currency_code.to_uppercase().as_str() {
+    let cc_upper = currency_code.to_uppercase();
+    match cc_upper.as_str() {
         "USD" => format!("${:.2}", value),
         "EUR" => format!("€{:.2}", value),
         "GBP" => format!("£{:.2}", value),
+        "TOKENS" | "CREDITS" => format!("{:.0} {}", value, currency_code),
         _ => format!("{:.2} {}", value, currency_code),
     }
 }

@@ -120,6 +120,7 @@ export const ALL_LOCALE_KEYS = [
   "Version",
   "ActionRefreshAll",
   "ActionSettings",
+  "ActionMinimize",
   "ActionClose",
   "ProviderAccount",
   "ProviderSession",

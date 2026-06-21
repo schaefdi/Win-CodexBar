@@ -173,6 +173,7 @@ impl LocaleKey {
         (LocaleKey::Version, "Version"),
         (LocaleKey::ActionRefreshAll, "ActionRefreshAll"),
         (LocaleKey::ActionSettings, "ActionSettings"),
+        (LocaleKey::ActionMinimize, "ActionMinimize"),
         (LocaleKey::ActionClose, "ActionClose"),
         (LocaleKey::ProviderAccount, "ProviderAccount"),
         (LocaleKey::ProviderSession, "ProviderSession"),

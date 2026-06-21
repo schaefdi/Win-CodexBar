@@ -1066,3 +1066,10 @@ fn bootstrap_payload_exposes_every_provider_variant() {
     assert!(encoded.contains("\"providers\""));
     assert!(encoded.contains("\"settings\""));
 }
+
+#[test]
+fn chart_data_for_antigravity_is_none_without_app() {
+    let data = super::build_provider_chart_data("antigravity".into(), None);
+    assert_eq!(data.provider_id, "antigravity");
+    assert!(data.local_usage.is_none());
+}

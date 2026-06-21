@@ -144,6 +144,7 @@ impl LocaleKey {
             // Main popup - Header actions
             LocaleKey::ActionRefreshAll => "Refresh All",
             LocaleKey::ActionSettings => "Settings",
+            LocaleKey::ActionMinimize => "Minimize",
             LocaleKey::ActionClose => "✕",
 
             // Main popup - Provider section

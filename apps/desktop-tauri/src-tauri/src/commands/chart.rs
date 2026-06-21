@@ -13,6 +13,7 @@ use std::sync::{
     Arc, Mutex, OnceLock,
     atomic::{AtomicBool, Ordering},
 };
+use tauri::Manager;
 
 /// A single (date, value) point for cost or credits history charts.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,13 +67,14 @@ pub struct ProviderChartData {
 
 #[tauri::command]
 pub async fn get_provider_chart_data(
+    app: tauri::AppHandle,
     provider_id: String,
     account_email: Option<String>,
 ) -> ProviderChartData {
     let fallback_provider_id = provider_id.clone();
     let cancel = register_chart_scan(&provider_id);
     tauri::async_runtime::spawn_blocking(move || {
-        build_provider_chart_data_with_cancel(provider_id, account_email, Some(cancel))
+        build_provider_chart_data_with_cancel(Some(app), provider_id, account_email, Some(cancel))
     })
     .await
     .unwrap_or_else(|err| {
@@ -86,10 +88,11 @@ pub(crate) fn build_provider_chart_data(
     provider_id: String,
     account_email: Option<String>,
 ) -> ProviderChartData {
-    build_provider_chart_data_with_cancel(provider_id, account_email, None)
+    build_provider_chart_data_with_cancel(None, provider_id, account_email, None)
 }
 
 fn build_provider_chart_data_with_cancel(
+    app: Option<tauri::AppHandle>,
     provider_id: String,
     account_email: Option<String>,
     cancel: Option<Arc<AtomicBool>>,
@@ -108,7 +111,7 @@ fn build_provider_chart_data_with_cancel(
     {
         None
     } else {
-        load_local_usage_summary(&provider_id, cancel.as_deref())
+        load_local_usage_summary(app.as_ref(), &provider_id, cancel.as_deref())
     };
 
     ProviderChartData {
@@ -148,9 +151,31 @@ fn register_chart_scan(provider_id: &str) -> Arc<AtomicBool> {
 }
 
 fn load_local_usage_summary(
+    app: Option<&tauri::AppHandle>,
     provider_id: &str,
     cancel: Option<&AtomicBool>,
 ) -> Option<ProviderLocalUsageSummary> {
+    if provider_id == "antigravity" {
+        let app = app?;
+        let state = app.state::<Mutex<super::AppState>>();
+        let guard = state.lock().ok()?;
+        let snapshot = guard
+            .provider_cache
+            .iter()
+            .find(|s| s.provider_id == "antigravity")?;
+        let cost = snapshot.cost.as_ref()?;
+        let tokens_used = cost.used.round() as u64;
+        return Some(ProviderLocalUsageSummary {
+            today_cost: None,
+            thirty_day_cost: None,
+            thirty_day_tokens: Some(tokens_used),
+            latest_tokens: None,
+            all_time_cost: None,
+            all_time_tokens: Some(tokens_used),
+            top_model: Some("Gemini".to_string()),
+            estimate_note: "From active plan status".to_string(),
+        });
+    }
     let thirty_day = scan_local_cost(provider_id, 30, cancel)?;
     if cancel.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
         return None;

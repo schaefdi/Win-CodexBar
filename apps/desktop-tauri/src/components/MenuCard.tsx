@@ -58,13 +58,17 @@ function maskEmail(email: string): string {
 }
 
 function formatCurrency(amount: number, code: string): string {
+  const upperCode = code.toUpperCase();
+  if (upperCode === "TOKENS" || upperCode === "CREDITS") {
+    return `${amount.toLocaleString("en-US", { maximumFractionDigits: 0 })} ${code}`;
+  }
   try {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: code,
     }).format(amount);
   } catch {
-    return `${code} ${amount.toFixed(2)}`;
+    return `${amount.toFixed(2)} ${code}`;
   }
 }
 

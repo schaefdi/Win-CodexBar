@@ -140,6 +140,7 @@ impl LocaleKey {
             // Main popup - Header actions
             LocaleKey::ActionRefreshAll => "刷新全部",
             LocaleKey::ActionSettings => "设置",
+            LocaleKey::ActionMinimize => "最小化",
             LocaleKey::ActionClose => "✕",
 
             // Main popup - Provider section

@@ -151,6 +151,7 @@ export default function PopOutPanel({
   }, []);
 
   const headerActions = [
+    { icon: "🗕", title: t("ActionMinimize"), onClick: () => { void getCurrentWindow().minimize(); } },
     { icon: "⊟", title: t("TooltipBackToTray"), onClick: goTray },
   ];
 

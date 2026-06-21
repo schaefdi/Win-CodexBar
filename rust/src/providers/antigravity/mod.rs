@@ -12,8 +12,8 @@ use std::process::Command;
 use std::sync::OnceLock;
 
 use crate::core::{
-    FetchContext, Provider, ProviderError, ProviderFetchResult, ProviderId, ProviderMetadata,
-    RateWindow, SourceMode, UsageSnapshot,
+    CostSnapshot, FetchContext, Provider, ProviderError, ProviderFetchResult, ProviderId,
+    ProviderMetadata, RateWindow, SourceMode, UsageSnapshot,
 };
 
 /// Antigravity provider
@@ -30,16 +30,14 @@ impl AntigravityProvider {
                 session_label: "Gemini Models",
                 weekly_label: "Claude & GPT Models",
                 supports_opus: false,
-                supports_credits: false,
+                supports_credits: true,
                 default_enabled: false,
                 is_primary: false,
-                dashboard_url: None,
+                dashboard_url: Some("https://antigravity.google/"),
                 status_page_url: None,
             },
         }
     }
-
-    /// Detect running Antigravity language server processes and extract connection info
     fn detect_all_process_info() -> Result<Vec<ProcessInfo>, ProviderError> {
         // Use PowerShell to get process command lines
         #[cfg(windows)]
@@ -242,7 +240,9 @@ impl AntigravityProvider {
     }
 
     /// Fetch user status from Antigravity API
-    async fn fetch_user_status(&self) -> Result<UsageSnapshot, ProviderError> {
+    async fn fetch_user_status(
+        &self,
+    ) -> Result<(UsageSnapshot, Option<CostSnapshot>), ProviderError> {
         let processes = Self::detect_all_process_info()?;
         let (api_port, process_info) = Self::find_working_api_port(processes).await?;
 
@@ -331,7 +331,7 @@ impl AntigravityProvider {
     fn parse_user_status(
         &self,
         response: UserStatusResponse,
-    ) -> Result<UsageSnapshot, ProviderError> {
+    ) -> Result<(UsageSnapshot, Option<CostSnapshot>), ProviderError> {
         let user_status = response
             .user_status
             .ok_or_else(|| ProviderError::Other("Missing userStatus".to_string()))?;
@@ -391,8 +391,9 @@ impl AntigravityProvider {
         // Add plan info
         let plan_name = user_status
             .plan_status
-            .and_then(|ps| ps.plan_info)
-            .and_then(|pi| pi.plan_display_name.or(pi.plan_name));
+            .as_ref()
+            .and_then(|ps| ps.plan_info.as_ref())
+            .and_then(|pi| pi.plan_display_name.clone().or(pi.plan_name.clone()));
 
         if let Some(plan) = plan_name {
             snapshot = snapshot.with_login_method(&plan);
@@ -402,7 +403,23 @@ impl AntigravityProvider {
             snapshot = snapshot.with_email(email);
         }
 
-        Ok(snapshot)
+        // Extract flow credits cost
+        let cost = if let Some(ref ps) = user_status.plan_status {
+            if let (Some(available), Some(pi)) = (ps.available_flow_credits, &ps.plan_info) {
+                if let Some(monthly) = pi.monthly_flow_credits {
+                    let used = (monthly - available).max(0.0);
+                    Some(CostSnapshot::new(used, "tokens", "Monthly").with_limit(monthly))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        Ok((snapshot, cost))
     }
 }
 
@@ -426,7 +443,13 @@ impl Provider for AntigravityProvider {
         tracing::debug!("Fetching Antigravity usage via local probe");
 
         match self.fetch_user_status().await {
-            Ok(usage) => Ok(ProviderFetchResult::new(usage, "local")),
+            Ok((usage, cost)) => {
+                let mut result = ProviderFetchResult::new(usage, "local");
+                if let Some(c) = cost {
+                    result = result.with_cost(c);
+                }
+                Ok(result)
+            }
             Err(e) => {
                 tracing::warn!("Antigravity probe failed: {}", e);
                 Err(e)
@@ -471,6 +494,8 @@ struct UserStatus {
 #[serde(rename_all = "camelCase")]
 struct PlanStatus {
     plan_info: Option<PlanInfo>,
+    available_flow_credits: Option<f64>,
+    available_prompt_credits: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -478,6 +503,8 @@ struct PlanStatus {
 struct PlanInfo {
     plan_name: Option<String>,
     plan_display_name: Option<String>,
+    monthly_flow_credits: Option<f64>,
+    monthly_prompt_credits: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -567,7 +594,7 @@ mod tests {
             ("Gemini 3.5 Flash (Medium)", 0.4),
         ]);
         let provider = AntigravityProvider::new();
-        let snap = provider.parse_user_status(resp).unwrap();
+        let (snap, _cost) = provider.parse_user_status(resp).unwrap();
 
         // Gemini family, most restrictive remaining = 0.4 -> used = (1 - 0.4) * 100 = 60%.
         assert!((snap.primary.used_percent - 60.0).abs() < 0.1);
@@ -604,7 +631,7 @@ mod tests {
             }
         });
         let resp: UserStatusResponse = serde_json::from_value(json).unwrap();
-        let snap = AntigravityProvider::new().parse_user_status(resp).unwrap();
+        let (snap, _cost) = AntigravityProvider::new().parse_user_status(resp).unwrap();
 
         // Gemini full -> 0% used.
         assert!((snap.primary.used_percent - 0.0).abs() < 0.1);
@@ -625,11 +652,38 @@ mod tests {
             ("Gemini 3.5 Flash (Low)", 0.6),
             ("Gemini 3.1 Pro (High)", 0.5),
         ]);
-        let snap = AntigravityProvider::new().parse_user_status(resp).unwrap();
+        let (snap, _cost) = AntigravityProvider::new().parse_user_status(resp).unwrap();
 
         // Gemini most restrictive remaining = 0.5 -> 50% used.
         assert!((snap.primary.used_percent - 50.0).abs() < 0.1);
         // No Claude/GPT models -> no placeholder window (avoids a fake 0% bar).
         assert!(snap.extra_rate_windows.is_empty());
+    }
+
+    #[test]
+    fn test_parse_user_status_with_credits() {
+        let json = serde_json::json!({
+            "userStatus": {
+                "planStatus": {
+                    "planInfo": {
+                        "planName": "Pro",
+                        "monthlyFlowCredits": 150000.0
+                    },
+                    "availableFlowCredits": 100.0
+                },
+                "cascadeModelConfigData": {
+                    "clientModelConfigs": []
+                }
+            }
+        });
+        let resp: UserStatusResponse = serde_json::from_value(json).unwrap();
+        let (snap, cost) = AntigravityProvider::new().parse_user_status(resp).unwrap();
+
+        assert_eq!(snap.login_method, Some("Pro".to_string()));
+        let cost = cost.unwrap();
+        assert_eq!(cost.used, 149900.0);
+        assert_eq!(cost.limit, Some(150000.0));
+        assert_eq!(cost.currency_code, "tokens");
+        assert_eq!(cost.period, "Monthly");
     }
 }

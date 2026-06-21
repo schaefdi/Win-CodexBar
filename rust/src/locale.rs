@@ -225,6 +225,7 @@ pub enum LocaleKey {
     // Main popup - Header actions
     ActionRefreshAll,
     ActionSettings,
+    ActionMinimize,
     ActionClose,
 
     // Main popup - Provider section
