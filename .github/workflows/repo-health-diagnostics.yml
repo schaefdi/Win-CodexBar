@@ -1,0 +1,48 @@
+name: Repo health diagnostics
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostics:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxdo-dev libayatana-appindicator3-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+          targets: x86_64-unknown-linux-gnu
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: Capture Rust audit
+        run: cargo audit --file Cargo.lock --json > cargo-audit.json || true
+      - name: Capture Rust Clippy findings
+        run: cargo clippy --manifest-path rust/Cargo.toml --all-targets --target x86_64-unknown-linux-gnu -- -D warnings > clippy.log 2>&1 || true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: apps/desktop-tauri/pnpm-lock.yaml
+      - run: pnpm --dir apps/desktop-tauri install --frozen-lockfile
+      - name: Capture frontend audit
+        run: pnpm --dir apps/desktop-tauri audit --prod --json > pnpm-audit.json || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win-codexbar-repair-diagnostics
+          path: |
+            cargo-audit.json
+            clippy.log
+            pnpm-audit.json
+          if-no-files-found: error
