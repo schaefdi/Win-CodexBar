@@ -1,0 +1,65 @@
+name: Repair Rust graph
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.head_ref == 'agent/repo-health-audit-20260710'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxdo-dev libayatana-appindicator3-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: x86_64-unknown-linux-gnu
+      - name: Apply focused Clippy repairs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          cost = Path('rust/src/cost_scanner.rs')
+          text = cost.read_text()
+          old = 'for (_, cost) in daily_costs.iter_mut() {'
+          new = 'for cost in daily_costs.values_mut() {'
+          if old not in text:
+              raise SystemExit('cost scanner Clippy target not found')
+          cost.write_text(text.replace(old, new, 1))
+
+          oauth = Path('rust/src/providers/claude/oauth.rs')
+          text = oauth.read_text()
+          old = '''            if let Ok(output) = std::process::Command::new("whoami").output() {\n                if output.status.success() {\n                    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();\n                    Self::push_keyring_candidate(&mut candidates, value.clone());\n                    if let Some((_, username)) = value.rsplit_once('\\\\') {\n                        Self::push_keyring_candidate(&mut candidates, username.to_string());\n                    }\n                    if let Some((_, username)) = value.rsplit_once('/') {\n                        Self::push_keyring_candidate(&mut candidates, username.to_string());\n                    }\n                }\n            }'''
+          new = '''            if let Ok(output) = std::process::Command::new("whoami").output()\n                && output.status.success()\n            {\n                let value = String::from_utf8_lossy(&output.stdout).trim().to_string();\n                Self::push_keyring_candidate(&mut candidates, value.clone());\n                if let Some((_, username)) = value.rsplit_once('\\\\') {\n                    Self::push_keyring_candidate(&mut candidates, username.to_string());\n                }\n                if let Some((_, username)) = value.rsplit_once('/') {\n                    Self::push_keyring_candidate(&mut candidates, username.to_string());\n                }\n            }'''
+          if old not in text:
+              raise SystemExit('OAuth Clippy target not found')
+          oauth.write_text(text.replace(old, new, 1))
+          PY
+      - name: Upgrade patched Quinn protocol runtime
+        run: cargo update -p quinn-proto --precise 0.11.15
+      - name: Verify repaired Rust application
+        run: |
+          cargo fmt --manifest-path rust/Cargo.toml --all --check
+          cargo clippy --manifest-path rust/Cargo.toml --all-targets --target x86_64-unknown-linux-gnu -- -D warnings
+          cargo test --manifest-path rust/Cargo.toml --target x86_64-unknown-linux-gnu
+          cargo clippy --manifest-path apps/desktop-tauri/src-tauri/Cargo.toml --all-targets --target x86_64-unknown-linux-gnu -- -D warnings
+          cargo test --manifest-path apps/desktop-tauri/src-tauri/Cargo.toml --target x86_64-unknown-linux-gnu
+          cargo install cargo-audit --locked
+          cargo audit --file Cargo.lock
+      - name: Commit repaired Rust source and lockfile
+        run: |
+          git config user.name "repo-health-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add rust/src/cost_scanner.rs rust/src/providers/claude/oauth.rs Cargo.lock .cargo/audit.toml
+          git diff --cached --quiet || git commit -m "fix: patch Rust advisories and Clippy findings"
+          git push origin HEAD:${{ github.head_ref }}

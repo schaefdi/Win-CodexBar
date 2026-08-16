@@ -615,7 +615,7 @@ pub fn get_daily_cost_history(provider: &str, days: u32) -> Vec<(String, f64)> {
             if summary.total_cost_usd > 0.0 && days > 0 {
                 // Distribute evenly for now (TODO: actual daily breakdown)
                 let daily = summary.total_cost_usd / days as f64;
-                for (_, cost) in daily_costs.iter_mut() {
+                for cost in daily_costs.values_mut() {
                     *cost = daily;
                 }
             }

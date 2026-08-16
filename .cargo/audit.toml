@@ -1,0 +1,8 @@
+[advisories]
+ignore = [
+  # Tauri 2.10.3 pulls plist 1.8.0, which constrains quick-xml to ^0.38.
+  # Tauri tracks the same temporary exceptions until plist can move to quick-xml >=0.41.
+  # Remove these as soon as the Tauri/plist graph supports the patched release.
+  "RUSTSEC-2026-0194",
+  "RUSTSEC-2026-0195",
+]
