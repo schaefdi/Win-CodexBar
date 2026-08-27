@@ -6,6 +6,7 @@ fn test_settings_default() {
     assert!(settings.enabled_providers.contains("claude"));
     assert!(settings.enabled_providers.contains("codex"));
     assert!(settings.enabled_providers.contains("gemini"));
+    assert!(settings.enabled_providers.contains("grok"));
     assert_eq!(settings.refresh_interval_secs, 300);
     assert!(settings.show_notifications);
     assert_eq!(settings.high_usage_threshold, 70.0);

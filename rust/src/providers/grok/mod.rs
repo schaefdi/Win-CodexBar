@@ -34,7 +34,7 @@ impl GrokProvider {
                 weekly_label: "On-demand",
                 supports_opus: false,
                 supports_credits: false,
-                default_enabled: false,
+                default_enabled: true,
                 is_primary: false,
                 dashboard_url: Some("https://grok.com/?_s=usage"),
                 status_page_url: Some("https://status.x.ai"),
