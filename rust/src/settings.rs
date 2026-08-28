@@ -244,6 +244,7 @@ impl Default for Settings {
         enabled.insert("claude".to_string());
         enabled.insert("codex".to_string());
         enabled.insert("gemini".to_string());
+        enabled.insert("grok".to_string());
 
         Self {
             enabled_providers: enabled,
